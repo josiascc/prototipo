@@ -43,7 +43,7 @@ class _AnimalSelectorDropdownState extends State<AnimalSelectorDropdown> {
     super.dispose();
   }
 
-  Future<void> _cargarAnimalInicial() async {
+    Future<void> _cargarAnimalInicial() async {
     final dbHelper = DatabaseHelper();
     List<Map<String, dynamic>> animales = await dbHelper.queryAllGanadoActivo();
 
@@ -57,9 +57,8 @@ class _AnimalSelectorDropdownState extends State<AnimalSelectorDropdown> {
         encontrado = animales.firstWhere(
           (a) => a['arete'].toString().toLowerCase() == widget.initialArete!.toLowerCase(),
         );
-        if (encontrado != null) {
-          _selectedId = encontrado['id'];
-        }
+        // CORRECCIÓN: Quitamos el 'if (encontrado != null)' redundante
+        _selectedId = encontrado['id'];
       } catch (_) {}
     }
 

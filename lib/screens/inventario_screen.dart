@@ -14,6 +14,9 @@ class _InventarioScreenState extends State<InventarioScreen> {
   List<Map<String, dynamic>> _listaInventario = [];
   bool _isLoading = true;
 
+  // Variables para el diseño interactivo y menú FAB
+  bool _menuFabAbierto = false;
+
   @override
   void initState() {
     super.initState();
@@ -37,8 +40,12 @@ class _InventarioScreenState extends State<InventarioScreen> {
     }
   }
 
-  // Modal para registrar un nuevo producto o insumo en bodega
+  // ===========================================================================
+  // 1. REGISTRAR NUEVO PRODUCTO
+  // ===========================================================================
   void _mostrarModalRegistrarInventario() {
+    setState(() => _menuFabAbierto = false);
+
     final nombreController = TextEditingController();
     final cantidadController = TextEditingController();
     String unidadSeleccionada = 'Sacos';
@@ -50,20 +57,20 @@ class _InventarioScreenState extends State<InventarioScreen> {
         return StatefulBuilder(
           builder: (context, setStateDialog) {
             return AlertDialog(
-              title: const Text('Registrar en Inventario'),
+              title: const Text('Registrar Nuevo Producto'),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     TextField(
                       controller: nombreController,
-                      decoration: const InputDecoration(labelText: 'Nombre del Insumo / Producto'),
+                      decoration: const InputDecoration(labelText: 'Nombre del Insumo / Producto *'),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: cantidadController,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(labelText: 'Cantidad Actual'),
+                      decoration: const InputDecoration(labelText: 'Stock Inicial *'),
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
@@ -72,11 +79,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
                       items: ['Sacos', 'Kilos', 'Litros', 'Unidades', 'Frascos', 'Dosis']
                           .map((u) => DropdownMenuItem(value: u, child: Text(u)))
                           .toList(),
-                      onChanged: (val) {
-                        setStateDialog(() {
-                          unidadSeleccionada = val!;
-                        });
-                      },
+                      onChanged: (val) => setStateDialog(() => unidadSeleccionada = val!),
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -93,24 +96,40 @@ class _InventarioScreenState extends State<InventarioScreen> {
                   child: const Text('Cancelar'),
                 ),
                 ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryGreen,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
                   onPressed: () async {
-                    if (nombreController.text.isNotEmpty) {
-                      double? cantidad = double.tryParse(cantidadController.text.trim()) ?? 0.0;
-                      
-                      final db = await _dbHelper.database;
-                      await db.insert('inventario', {
-                        'nombre': nombreController.text.trim(),
-                        'cantidad': cantidad,
-                        'unidad': unidadSeleccionada,
-                        'descripcion': descripcionController.text.trim(),
-                        'fecha_actualizacion': DateTime.now().toIso8601String().split('T')[0],
-                      });
-
-                      Navigator.pop(context);
-                      _cargarInventario();
+                    if (nombreController.text.trim().isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Por favor ingrese el nombre del producto.')),
+                      );
+                      return;
                     }
+
+                    double cantidad = double.tryParse(cantidadController.text.trim()) ?? 0.0;
+                    
+                    final db = await _dbHelper.database;
+                    await db.insert('inventario', {
+                      'nombre_producto': nombreController.text.trim(),
+                      'stock_actual': cantidad,
+                      'unidad_medida': unidadSeleccionada,
+                      'categoria': descripcionController.text.trim().isEmpty ? 'General' : descripcionController.text.trim(),
+                      'fecha_vencimiento': DateTime.now().toIso8601String().split('T')[0],
+                      'monto': 0.0,
+                    });
+
+                    if (!mounted) return;
+                    Navigator.pop(context);
+                    _cargarInventario();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Producto registrado exitosamente.')),
+                    );
                   },
-                  child: const Text('Guardar'),
+                  child: const Text('Guardar', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                 ),
               ],
             );
@@ -120,7 +139,213 @@ class _InventarioScreenState extends State<InventarioScreen> {
     );
   }
 
-  // Modal desplegable (Bottom Sheet) para ver el detalle al hacer clic en una tarjeta
+  // ===========================================================================
+  // 2. SELECCIONADOR PARA EDITAR, ENTRADA O SALIDA
+  // ===========================================================================
+  void _mostrarModalSeleccionarProducto({required String accion}) {
+    setState(() => _menuFabAbierto = false);
+
+    String titulo = 'Seleccionar Producto';
+    if (accion == 'editar') titulo = 'Seleccionar para Editar';
+    if (accion == 'entrada') titulo = 'Registrar Entrada de Stock';
+    if (accion == 'salida') titulo = 'Registrar Salida / Uso';
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(titulo),
+          content: SizedBox(
+            width: MediaQuery.of(context).size.width * 0.85,
+            height: 400,
+            child: _listaInventario.isEmpty
+                ? const Center(child: Text('No hay insumos en bodega.'))
+                : ListView.builder(
+                    itemCount: _listaInventario.length,
+                    itemBuilder: (context, index) {
+                      final item = _listaInventario[index];
+                      return Card(
+                        margin: const EdgeInsets.symmetric(vertical: 4),
+                        child: ListTile(
+                          title: Text(item['nombre_producto'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text('Stock actual: ${item['stock_actual']} ${item['unidad_medida']}'),
+                          trailing: const Icon(Icons.chevron_right, color: AppTheme.primaryGreen),
+                          onTap: () {
+                            Navigator.pop(context);
+                            if (accion == 'editar') {
+                              _mostrarModalEditarProducto(item);
+                            } else if (accion == 'entrada') {
+                              _mostrarModalMovimientoStock(item, esEntrada: true);
+                            } else if (accion == 'salida') {
+                              _mostrarModalMovimientoStock(item, esEntrada: false);
+                            }
+                          },
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ===========================================================================
+  // 3. EDITAR PRODUCTO
+  // ===========================================================================
+  void _mostrarModalEditarProducto(Map<String, dynamic> item) {
+    final nombreController = TextEditingController(text: item['nombre_producto']);
+    String unidadSeleccionada = item['unidad_medida'] ?? 'Sacos';
+    final descripcionController = TextEditingController(text: item['categoria'] == 'General' ? '' : item['categoria']);
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: const Text('Editar Producto'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nombreController,
+                      decoration: const InputDecoration(labelText: 'Nombre del Producto *'),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: unidadSeleccionada,
+                      decoration: const InputDecoration(labelText: 'Unidad de Medida'),
+                      items: ['Sacos', 'Kilos', 'Litros', 'Unidades', 'Frascos', 'Dosis']
+                          .map((u) => DropdownMenuItem(value: u, child: Text(u)))
+                          .toList(),
+                      onChanged: (val) => setStateDialog(() => unidadSeleccionada = val!),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: descripcionController,
+                      decoration: const InputDecoration(labelText: 'Descripción / Ubicación'),
+                      maxLines: 2,
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryGreen,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () async {
+                    if (nombreController.text.trim().isNotEmpty) {
+                      final db = await _dbHelper.database;
+                      await db.update(
+                        'inventario',
+                        {
+                          'nombre_producto': nombreController.text.trim(),
+                          'unidad_medida': unidadSeleccionada,
+                          'categoria': descripcionController.text.trim().isEmpty ? 'General' : descripcionController.text.trim(),
+                        },
+                        where: 'id = ?',
+                        whereArgs: [item['id']],
+                      );
+
+                      if (!mounted) return;
+                      Navigator.pop(context);
+                      _cargarInventario();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Producto actualizado exitosamente.')),
+                      );
+                    }
+                  },
+                  child: const Text('Actualizar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // ===========================================================================
+  // 4. ENTRADA O SALIDA DE STOCK
+  // ===========================================================================
+  void _mostrarModalMovimientoStock(Map<String, dynamic> item, {required bool esEntrada}) {
+    final cantidadController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(esEntrada ? 'Entrada: ${item['nombre_producto']}' : 'Salida / Uso: ${item['nombre_producto']}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Stock actual: ${item['stock_actual']} ${item['unidad_medida']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              TextField(
+                controller: cantidadController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: esEntrada ? 'Cantidad a sumar (+)' : 'Cantidad a descontar (-)',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: esEntrada ? Colors.green : Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () async {
+                double valor = double.tryParse(cantidadController.text.trim()) ?? 0.0;
+                if (valor > 0) {
+                  double stockActual = (item['stock_actual'] ?? 0.0).toDouble();
+                  double nuevoStock = esEntrada ? (stockActual + valor) : (stockActual - valor);
+                  if (nuevoStock < 0) nuevoStock = 0;
+
+                  final db = await _dbHelper.database;
+                  await db.update(
+                    'inventario',
+                    {'stock_actual': nuevoStock},
+                    where: 'id = ?',
+                    whereArgs: [item['id']],
+                  );
+
+                  if (!mounted) return;
+                  Navigator.pop(context);
+                  _cargarInventario();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(esEntrada ? 'Stock sumado correctamente.' : 'Stock descontado correctamente.')),
+                  );
+                }
+              },
+              child: const Text('Confirmar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Detalle desplegable inferior (Bottom Sheet)
   void _mostrarDetalleInventario(Map<String, dynamic> item) {
     showModalBottomSheet(
       context: context,
@@ -149,15 +374,15 @@ class _InventarioScreenState extends State<InventarioScreen> {
               ),
               const Divider(),
               const SizedBox(height: 8),
-              Text('Producto: ${item['nombre']}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              Text('Producto: ${item['nombre_producto']}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 6),
-              Text('Stock: ${item['cantidad']} ${item['unidad']}'),
+              Text('Stock: ${item['stock_actual']} ${item['unidad_medida']}'),
               const SizedBox(height: 6),
-              Text('Última Actualización: ${item['fecha_actualizacion'] ?? 'N/D'}'),
+              Text('Última Actualización: ${item['fecha_vencimiento'] ?? 'N/D'}'),
               const SizedBox(height: 12),
               const Text('Descripción / Ubicación:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
               const SizedBox(height: 4),
-              Text(item['descripcion']?.isEmpty == true ? 'Sin descripción registrada.' : item['descripcion']),
+              Text(item['categoria']?.isEmpty == true || item['categoria'] == 'General' ? 'Sin descripción registrada.' : item['categoria']),
               const SizedBox(height: 20),
             ],
           ),
@@ -168,55 +393,153 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : _listaInventario.isEmpty
-                ? const Center(
-                    child: Text(
-                      'No hay insumos en bodega.\nPresiona el botón "+" para agregar productos.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey, fontSize: 16),
-                    ),
-                  )
-                : ListView.builder(
-                    itemCount: _listaInventario.length,
-                    padding: const EdgeInsets.all(8.0),
-                    itemBuilder: (context, index) {
-                      final item = _listaInventario[index];
-                      return Card(
-                        elevation: 2,
-                        margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: AppTheme.lightGreen.withOpacity(0.2),
-                            child: const Icon(AppTheme.iconoInventario, color: AppTheme.primaryGreen),
+    return Scaffold(
+      body: Stack(
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 12),
+              Expanded(
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _listaInventario.isEmpty
+                        ? const Center(
+                            child: Text(
+                              'No hay insumos en bodega.\nPresiona el botón "+" para agregar productos.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Colors.grey, fontSize: 16),
+                            ),
+                          )
+                        : ListView.builder(
+                            itemCount: _listaInventario.length,
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+                            itemBuilder: (context, index) {
+                              final item = _listaInventario[index];
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: AppTheme.primaryGreen, width: 1),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFF1C3540).withOpacity(0.08),
+                                      blurRadius: 20,
+                                      offset: const Offset(0, 8),
+                                    )
+                                  ],
+                                ),
+                                child: ListTile(
+                                  contentPadding: const EdgeInsets.all(12),
+                                  leading: CircleAvatar(
+                                    backgroundColor: AppTheme.lightGreen.withOpacity(0.2),
+                                    child: const Icon(AppTheme.iconoInventario, color: AppTheme.primaryGreen),
+                                  ),
+                                  title: Text(
+                                    '${item['nombre_producto']}',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                  ),
+                                  subtitle: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Stock: ${item['stock_actual']} ${item['unidad_medida']}',
+                                        style: const TextStyle(color: Color(0xFF6C8795), fontSize: 14, fontWeight: FontWeight.bold),
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        'Actualizado: ${item['fecha_vencimiento'] ?? ''}',
+                                        style: const TextStyle(color: Color(0xFF6C8795), fontSize: 13),
+                                      ),
+                                    ],
+                                  ),
+                                  trailing: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFE5F4E8),
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: const Text(
+                                      'Disponible',
+                                      style: TextStyle(color: Color(0xFF2D8235), fontWeight: FontWeight.bold, fontSize: 13),
+                                    ),
+                                  ),
+                                  onTap: () => _mostrarDetalleInventario(item),
+                                ),
+                              );
+                            },
                           ),
-                          title: Text(
-                            '${item['nombre']}',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Text(
-                            'Stock: ${item['cantidad']} ${item['unidad']} | Actualizado: ${item['fecha_actualizacion'] ?? ''}',
-                          ),
-                          trailing: const Icon(Icons.info_outline, color: Colors.grey),
-                          onTap: () => _mostrarDetalleInventario(item),
-                        ),
-                      );
-                    },
-                  ),
-        Positioned(
-          right: 16,
-          bottom: 16,
-          child: FloatingActionButton(
-            onPressed: _mostrarModalRegistrarInventario,
-            backgroundColor: AppTheme.primaryGreen,
-            tooltip: 'Registrar Insumo',
-            child: const Icon(Icons.add, color: Colors.white),
+              ),
+            ],
           ),
-        ),
-      ],
+
+          // Overlay oscuro cuando el menú del FAB está abierto
+          if (_menuFabAbierto)
+            GestureDetector(
+              onTap: () => setState(() => _menuFabAbierto = false),
+              child: Container(color: Colors.black.withOpacity(0.5)),
+            ),
+
+          // Menú Desplegable del FAB flotante con las 4 opciones
+          if (_menuFabAbierto)
+            Positioned(
+              right: 20,
+              bottom: 96,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  _buildFabOption('Registrar nuevo producto', Icons.add_box, _mostrarModalRegistrarInventario),
+                  const SizedBox(height: 12),
+                  _buildFabOption('Editar producto', Icons.edit, () => _mostrarModalSeleccionarProducto(accion: 'editar')),
+                  const SizedBox(height: 12),
+                  _buildFabOption('Entrada de producto', Icons.arrow_circle_down, () => _mostrarModalSeleccionarProducto(accion: 'entrada')),
+                  const SizedBox(height: 12),
+                  _buildFabOption('Salida de producto', Icons.arrow_circle_up, () => _mostrarModalSeleccionarProducto(accion: 'salida')),
+                ],
+              ),
+            ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: AppTheme.primaryGreen,
+        child: Icon(_menuFabAbierto ? Icons.close : Icons.add, color: Colors.white, size: 28),
+        onPressed: () {
+          setState(() {
+            _menuFabAbierto = !_menuFabAbierto;
+          });
+        },
+      ),
+    );
+  }
+
+  Widget _buildFabOption(String label, IconData icon, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4))
+              ],
+            ),
+            child: Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+          ),
+          const SizedBox(width: 10),
+          Container(
+            width: 40,
+            height: 40,
+            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+            child: Icon(icon, color: AppTheme.primaryGreen, size: 20),
+          ),
+        ],
+      ),
     );
   }
 }

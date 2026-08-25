@@ -23,9 +23,9 @@ class DatabaseHelper {
     String path = join(appDir.path, 'prototipoganado.db');
     return await openDatabase(
       path,
-      version: 11,
+      version: 1, // <--- Mantén esto en 1 mientras estés en fase de prototipo limpio
       onCreate: _onCreate,
-      onUpgrade: _onUpgrade,
+      // onUpgrade: _onUpgrade, // <--- Descomenta esto cuando decidas activar migraciones automáticas
     );
   }
 
@@ -38,6 +38,10 @@ class DatabaseHelper {
     }
     return fotosDir.path;
   }
+
+  // ===========================================================================
+  // ZONA DE CICLO DE VIDA (CREACIÓN Y MIGRACIONES)
+  // ===========================================================================
 
   Future<void> _onCreate(Database db, int version) async {
     // 1. Tabla GANADO
@@ -68,16 +72,16 @@ class DatabaseHelper {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         ganado_id INTEGER, 
         arete_asociado TEXT,
-        categoria_sanitaria TEXT,  -- vacunacion, fumigacion, desparasitacion, tratamiento
-        tipo_especifico TEXT,      -- Tipo vacuna, tipo fumigación, tipo desparasitante, etc.
+        categoria_sanitaria TEXT,  
+        tipo_especifico TEXT,      
         producto TEXT,
         fecha TEXT,
-        dosis TEXT,                -- Dosis aplicada (ml, mg, etc.)
-        via_aplicacion TEXT,       -- Subcutánea, Inyectable, Aspersión, etc.
+        dosis TEXT,                
+        via_aplicacion TEXT,       
         lote TEXT,
         veterinario TEXT,
-        diagnostico TEXT,          -- Diagnóstico / Motivo
-        duracion_dias INTEGER,     -- Duración del tratamiento en días
+        diagnostico TEXT,          
+        duracion_dias INTEGER,     
         observaciones TEXT,
         FOREIGN KEY (ganado_id) REFERENCES ganado (id) ON DELETE CASCADE
       )
@@ -149,13 +153,62 @@ class DatabaseHelper {
     ''');
   }
 
+  /* 
+   * ===========================================================================
+   * MOTOR DE MIGRACIÓN REUTILIZABLE (COMENTADO PARA EL FUTURO)
+   * ===========================================================================
+   * 
+   * ¿Cómo funciona este sistema reutilizable?
+   * 1. Defines tus cambios por cada versión numérica en este mapa.
+   * 2. El método _onUpgrade recorre de forma inteligente desde la versión vieja 
+   *    del usuario hasta la nueva, aplicando los cambios paso a paso de forma limpia.
+   */
+
+  /*
+  // Mapa de migraciones ordenado por versión objetivo
+  final Map<int, Future<void> Function(Database db)> _migrations = {
+    2: (db) async {
+      // Ejemplo Versión 2: Agregar columna color a ganado
+      await db.execute("ALTER TABLE ganado ADD COLUMN color TEXT;");
+    },
+    3: (db) async {
+      // Ejemplo Versión 3: Crear una tabla completamente nueva
+      await db.execute('''
+        CREATE TABLE potreros (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          nombre_potrero TEXT,
+          capacidad_maxima INTEGER
+        )
+      ''');
+    },
+    4: (db) async {
+      // Ejemplo Versión 4: Agregar campo a otra tabla existente
+      await db.execute("ALTER TABLE sanidad ADD COLUMN costo REAL;");
+    },
+    5: (db) async {
+      // Ejemplo Versión 5: Modificar/añadir restricciones o lo que necesites
+      await db.execute("ALTER TABLE finanzas ADD COLUMN comprobante TEXT;");
+    },
+  };
+
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 11) {
-      try { await db.execute("ALTER TABLE produccion ADD COLUMN entregado INTEGER DEFAULT 1;"); } catch (_) {}
+    // Bucle inteligente que ejecuta las migraciones de forma secuencial
+    for (int version = oldVersion + 1; version <= newVersion; version++) {
+      if (_migrations.containsKey(version)) {
+        try {
+          await _migrations[version]!(db);
+        } catch (e) {
+          print("Error aplicando la migración para la versión $version: $e");
+        }
+      }
     }
   }
+  */
 
-  // ==================== GANADO ====================
+  // ===========================================================================
+  // MÉTODOS DE NEGOCIO (CRUD Y CONSULTAS)
+  // ===========================================================================
+
   Future<int> insertGanado(Map<String, dynamic> row) async {
     Database db = await database;
     return await db.insert('ganado', row);
