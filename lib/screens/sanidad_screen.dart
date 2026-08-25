@@ -31,7 +31,6 @@ class _SanidadScreenState extends State<SanidadScreen> {
     setState(() => _isLoading = true);
     
     final db = await _dbHelper.database;
-    // Realizamos un LEFT JOIN para obtener también el sexo y la foto del animal si existe en la tabla ganado
     final data = await db.rawQuery('''
       SELECT s.*, g.sexo as animal_sexo, g.foto as animal_foto 
       FROM sanidad s 
@@ -58,9 +57,12 @@ class _SanidadScreenState extends State<SanidadScreen> {
       return;
     }
 
-    // Estado local del modal
-    String tipoSeleccionado = tipoInicial.toLowerCase(); // 'vacunacion', 'fumigacion', 'desparasitacion', 'tratamiento'
-    
+    // Usamos el tipoInicial directamente como categoría fija (en minúsculas o formato interno)
+    String tipoSeleccionado = tipoInicial.toLowerCase(); 
+    if (tipoSeleccionado == 'fumigacion/baño') {
+      tipoSeleccionado = 'fumigacion';
+    }
+
     // Controladores comunes y específicos
     final fechaController = TextEditingController(text: DateTime.now().toIso8601String().split('T')[0]);
     final productoController = TextEditingController();
@@ -95,13 +97,24 @@ class _SanidadScreenState extends State<SanidadScreen> {
 
     if (!mounted) return;
 
+    // Título dinámico según el tipo seleccionado
+    String obtenerTituloFormulario() {
+      switch (tipoSeleccionado) {
+        case 'vacunacion': return 'Registrar Vacunación';
+        case 'fumigacion': return 'Registrar Fumigación / Baño';
+        case 'desparasitacion': return 'Registrar Desparasitación';
+        case 'tratamiento': return 'Registrar Tratamiento Clínico';
+        default: return 'Registrar Tratamiento Sanitario';
+      }
+    }
+
     showDialog(
       context: context,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setStateDialog) {
             
-            // Función auxiliar para abrir el buscador y seleccionar animales (más ancho y alto)
+            // Función auxiliar para abrir el buscador y seleccionar animales
             Future<void> _abrirBuscadorAnimales() async {
               String queryBusqueda = '';
               await showDialog(
@@ -137,7 +150,7 @@ class _SanidadScreenState extends State<SanidadScreen> {
                               ),
                               const SizedBox(height: 12),
                               SizedBox(
-                                height: 400, // Altura aumentada para mayor comodidad
+                                height: 400,
                                 child: animalesFiltrados.isEmpty
                                     ? const Center(child: Text('No se encontraron animales.'))
                                     : ListView.builder(
@@ -176,7 +189,7 @@ class _SanidadScreenState extends State<SanidadScreen> {
                                                   animalesSeleccionados.removeWhere((a) => a['id'] == animal['id']);
                                                 }
                                               });
-                                              setStateDialog(() {}); // Refresca el modal principal
+                                              setStateDialog(() {});
                                             },
                                           );
                                         },
@@ -200,8 +213,7 @@ class _SanidadScreenState extends State<SanidadScreen> {
             }
 
             return AlertDialog(
-              title: const Text('Registrar Tratamiento Sanitario'),
-              // Ventana del formulario con mayor ancho (95% de la pantalla)
+              title: Text(obtenerTituloFormulario()),
               insetPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 24),
               content: SizedBox(
                 width: MediaQuery.of(context).size.width * 0.95,
@@ -210,24 +222,6 @@ class _SanidadScreenState extends State<SanidadScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Selector de Tipo de Registro
-                      DropdownButtonFormField<String>(
-                        value: tipoSeleccionado,
-                        decoration: const InputDecoration(labelText: 'Categoría de Registro'),
-                        items: const [
-                          DropdownMenuItem(value: 'vacunacion', child: Text('Vacunación')),
-                          DropdownMenuItem(value: 'fumigacion', child: Text('Fumigación / Baño')),
-                          DropdownMenuItem(value: 'desparasitacion', child: Text('Desparasitación')),
-                          DropdownMenuItem(value: 'tratamiento', child: Text('Tratamiento Clínico')),
-                        ],
-                        onChanged: (val) {
-                          setStateDialog(() {
-                            tipoSeleccionado = val!;
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 16),
-
                       // ==================== 1. VACUNACIÓN ====================
                       if (tipoSeleccionado == 'vacunacion') ... [
                         TextField(
@@ -459,7 +453,6 @@ class _SanidadScreenState extends State<SanidadScreen> {
                   ),
                 ),
               ),
-              // Botones de cancelar y guardar ubicados juntos en la parte inferior
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
@@ -493,21 +486,37 @@ class _SanidadScreenState extends State<SanidadScreen> {
                     }
 
                     for (var animal in animalesSeleccionados) {
-                      String tipoDesc = '';
-                      if (tipoSeleccionado == 'vacunacion') tipoDesc = 'Vacuna: ${tipoVacunaController.text}';
-                      if (tipoSeleccionado == 'fumigacion') tipoDesc = 'Fumigación: $tipoFumigacionSeleccionado';
-                      if (tipoSeleccionado == 'desparasitacion') tipoDesc = 'Desparasitación: $tipoDesparasitanteSeleccionado';
-                      if (tipoSeleccionado == 'tratamiento') tipoDesc = 'Tratamiento: $tipoTratamientoSeleccionado (${diagnosticoController.text})';
+                      String tipoCategoria = tipoSeleccionado; 
+                      String tipoEspecifico = '';
+                      if (tipoSeleccionado == 'vacunacion') tipoEspecifico = tipoVacunaController.text.trim();
+                      if (tipoSeleccionado == 'fumigacion') tipoEspecifico = tipoFumigacionSeleccionado;
+                      if (tipoSeleccionado == 'desparasitacion') tipoEspecifico = tipoDesparasitanteSeleccionado;
+                      if (tipoSeleccionado == 'tratamiento') tipoEspecifico = tipoTratamientoSeleccionado;
+
+                      String dosisStr = '';
+                      if (tipoSeleccionado == 'vacunacion') dosisStr = '${dosisVacuna.toStringAsFixed(0)} ml';
+                      if (tipoSeleccionado == 'desparasitacion') dosisStr = '${dosisDesparasitacion.toStringAsFixed(0)} ml';
+                      if (tipoSeleccionado == 'tratamiento') dosisStr = dosisTratamientoController.text.trim();
+
+                      String viaStr = '';
+                      if (tipoSeleccionado == 'vacunacion') viaStr = viaVacunaController.text.trim();
+                      if (tipoSeleccionado == 'desparasitacion') viaStr = viaDesparasitacionSeleccionado;
+                      if (tipoSeleccionado == 'tratamiento') viaStr = viaTratamientoSeleccionado;
 
                       await _dbHelper.insertSanidad({
                         'ganado_id': animal['id'],
                         'arete_asociado': animal['arete'],
-                        'tipo_tratamiento': tipoDesc,
+                        'categoria_sanitaria': tipoCategoria,
+                        'tipo_especifico': tipoEspecifico,
                         'producto': productoVal,
                         'fecha': fechaController.text,
-                        'observaciones': observacionesController.text.trim().isEmpty 
-                            ? 'Vet: ${veterinarioController.text} | Lote: ${loteController.text}' 
-                            : '${observacionesController.text.trim()} | Vet: ${veterinarioController.text}',
+                        'dosis': dosisStr.isEmpty ? null : dosisStr,
+                        'via_aplicacion': viaStr.isEmpty ? null : viaStr,
+                        'lote': loteController.text.trim().isEmpty ? null : loteController.text.trim(),
+                        'veterinario': veterinarioController.text.trim().isEmpty ? null : veterinarioController.text.trim(),
+                        'diagnostico': tipoSeleccionado == 'tratamiento' ? diagnosticoController.text.trim() : null,
+                        'duracion_dias': tipoSeleccionado == 'tratamiento' ? duracionDias : null,
+                        'observaciones': observacionesController.text.trim().isEmpty ? null : observacionesController.text.trim(),
                       });
                     }
 
@@ -619,7 +628,7 @@ class _SanidadScreenState extends State<SanidadScreen> {
       case 'fumigacion': return 'Fumigación';
       case 'desparasitacion': return 'Desparasitación';
       case 'tratamiento': return 'Tratamiento';
-      default: return 'Todas';
+      default: return 'Todos';
     }
   }
 
@@ -627,20 +636,22 @@ class _SanidadScreenState extends State<SanidadScreen> {
   Widget build(BuildContext context) {
     final textoBusqueda = _searchController.text.trim().toLowerCase();
     final listaFiltrada = _listaSanidad.where((item) {
-      final tipoTratamiento = (item['tipo_tratamiento'] ?? '').toString().toLowerCase();
+      // Usamos categoria_sanitaria en lugar de tipo_tratamiento
+      final categoriaSanitaria = (item['categoria_sanitaria'] ?? '').toString().toLowerCase();
+      final tipoEspecifico = (item['tipo_especifico'] ?? '').toString().toLowerCase();
       
       bool coincideFiltro = true;
       if (_filtroActivo == 'vacunacion') {
-        coincideFiltro = tipoTratamiento.contains('vacuna');
+        coincideFiltro = categoriaSanitaria.contains('vacunacion');
       } else if (_filtroActivo == 'fumigacion') {
-        coincideFiltro = tipoTratamiento.contains('fumigación') || tipoTratamiento.contains('baño');
+        coincideFiltro = categoriaSanitaria.contains('fumigacion');
       } else if (_filtroActivo == 'desparasitacion') {
-        coincideFiltro = tipoTratamiento.contains('desparasitación');
+        coincideFiltro = categoriaSanitaria.contains('desparasitacion');
       } else if (_filtroActivo == 'tratamiento') {
-        coincideFiltro = tipoTratamiento.contains('tratamiento') || tipoTratamiento.contains('antibiótico');
+        coincideFiltro = categoriaSanitaria.contains('tratamiento');
       }
 
-      final textoCompleto = '${item['arete_asociado']} ${item['tipo_tratamiento']} ${item['producto']} ${item['observaciones']}'.toLowerCase();
+      final textoCompleto = '${item['arete_asociado']} $categoriaSanitaria $tipoEspecifico ${item['producto']} ${item['observaciones']}'.toLowerCase();
       final coincideTexto = textoCompleto.contains(textoBusqueda);
 
       return coincideFiltro && coincideTexto;
@@ -700,7 +711,7 @@ class _SanidadScreenState extends State<SanidadScreen> {
                                         : null,
                                   ),
                                   title: Text(
-                                    'Arete: ${item['arete_asociado']} - ${item['tipo_tratamiento']}',
+                                    'Arete: ${item['arete_asociado']} - ${item['tipo_especifico'] ?? item['categoria_sanitaria']}',
                                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                                   ),
                                   subtitle: Column(
@@ -760,7 +771,7 @@ class _SanidadScreenState extends State<SanidadScreen> {
                     Icon(Icons.filter_list, size: 16, color: AppTheme.primaryGreen),
                     const SizedBox(width: 4),
                     Text(
-                      _obtenerNombreFiltroCorto(_filtroActivo),
+                      _obtenerNombreFiltroCorto(_filtroActivo), // Muestra exactamente la opción seleccionada
                       style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primaryGreen),
                     ),
                     const SizedBox(width: 4),
@@ -774,11 +785,11 @@ class _SanidadScreenState extends State<SanidadScreen> {
                   });
                 },
                 itemBuilder: (context) => [
-                  const PopupMenuItem(value: 'todas', child: Text('Todas')),
-                  const PopupMenuItem(value: 'vacunacion', child: Text('Vacunaciones')),
-                  const PopupMenuItem(value: 'fumigacion', child: Text('Fumigaciones')),
-                  const PopupMenuItem(value: 'desparasitacion', child: Text('Desparasitaciones')),
-                  const PopupMenuItem(value: 'tratamiento', child: Text('Tratamientos')),
+                  const PopupMenuItem(value: 'todas', child: Text('Todos')),
+                  const PopupMenuItem(value: 'vacunacion', child: Text('Vacunación')),
+                  const PopupMenuItem(value: 'fumigacion', child: Text('Fumigación')),
+                  const PopupMenuItem(value: 'desparasitacion', child: Text('Desparasitación')),
+                  const PopupMenuItem(value: 'tratamiento', child: Text('Tratamiento')),
                 ],
               ),
             ),
@@ -882,7 +893,7 @@ class _SanidadScreenState extends State<SanidadScreen> {
               const SizedBox(height: 8),
               Text('Arete del Animal: ${item['arete_asociado']}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 6),
-              Text('Tratamiento: ${item['tipo_tratamiento']}'),
+              Text('Tratamiento: ${item['tipo_especifico'] ?? item['categoria_sanitaria']}'),
               const SizedBox(height: 6),
               Text('Producto: ${item['producto']}'),
               const SizedBox(height: 6),

@@ -68,9 +68,16 @@ class DatabaseHelper {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         ganado_id INTEGER, 
         arete_asociado TEXT,
-        tipo_tratamiento TEXT,
+        categoria_sanitaria TEXT,  -- vacunacion, fumigacion, desparasitacion, tratamiento
+        tipo_especifico TEXT,      -- Tipo vacuna, tipo fumigación, tipo desparasitante, etc.
         producto TEXT,
         fecha TEXT,
+        dosis TEXT,                -- Dosis aplicada (ml, mg, etc.)
+        via_aplicacion TEXT,       -- Subcutánea, Inyectable, Aspersión, etc.
+        lote TEXT,
+        veterinario TEXT,
+        diagnostico TEXT,          -- Diagnóstico / Motivo
+        duracion_dias INTEGER,     -- Duración del tratamiento en días
         observaciones TEXT,
         FOREIGN KEY (ganado_id) REFERENCES ganado (id) ON DELETE CASCADE
       )
@@ -211,6 +218,16 @@ class DatabaseHelper {
     return await db.insert('reproduccion', row);
   }
 
+  Future<List<Map<String, dynamic>>> queryAllReproduccionConGanado() async {
+    Database db = await database;
+    return await db.rawQuery('''
+      SELECT r.*, g.nombre as animal_nombre, g.raza as animal_raza, g.sexo as animal_sexo, g.foto as animal_foto, g.categoria as animal_categoria
+      FROM reproduccion r
+      LEFT JOIN ganado g ON r.ganado_id = g.id
+      ORDER BY r.id DESC
+    ''');
+  }
+
   Future<List<Map<String, dynamic>>> getAlertasReproduccion() async {
     Database db = await database;
     return await db.rawQuery('''
@@ -221,6 +238,57 @@ class DatabaseHelper {
       ) AND (tipo_evento = 'Parto' OR tipo_evento = 'Aborto')
       ORDER BY fecha ASC
     ''');
+  }
+
+  Future<void> registrarPartoConCesionDeCrias({
+    required Map<String, dynamic> eventoParto,
+    required List<Map<String, dynamic>> listaCrias,
+  }) async {
+    Database db = await database;
+    await db.transaction((txn) async {
+      await txn.insert('reproduccion', eventoParto);
+
+      for (var cria in listaCrias) {
+        await txn.insert('ganado', {
+          'arete': cria['arete'],
+          'nombre': cria['nombre'] ?? 'Cría de ${eventoParto['arete_asociado']}',
+          'categoria': 'Cría / Ternero(a)',
+          'raza': cria['raza'] ?? 'No especificada',
+          'sexo': cria['genero'],
+          'fecha_ingreso': eventoParto['fecha'],
+          'fecha_nacimiento': eventoParto['fecha'],
+          'estado': 'Activo',
+          'madre_id': eventoParto['ganado_id'],
+          'madre_arete': eventoParto['arete_asociado'],
+          'padre_arete': eventoParto['padre_arete'],
+          'foto': cria['foto'],
+        });
+      }
+    });
+  }
+
+  Future<Map<String, int>> getEstadisticasReproduccion() async {
+    Database db = await database;
+    
+    var gestantesRes = await db.rawQuery('''
+      SELECT COUNT(DISTINCT arete_asociado) as total 
+      FROM reproduccion 
+      WHERE (tipo_evento = 'Diagnóstico Preñez' AND diagnostico = 'Gestante')
+         OR id IN (SELECT MAX(id) FROM reproduccion GROUP BY arete_asociado HAVING tipo_evento = 'Diagnóstico Preñez' AND diagnostico = 'Gestante')
+    ''');
+    
+    int gestantes = Sqflite.firstIntValue(gestantesRes) ?? 0;
+    
+    var animalesActivos = await queryAllGanadoActivo();
+    int totalHembras = animalesActivos.where((a) => (a['sexo'] ?? '').toString() == 'Hembra').length;
+    int produccion = animalesActivos.where((a) => (a['categoria'] ?? '').toString().toLowerCase().contains('lechera')).length;
+    int vacias = totalHembras - gestantes;
+
+    return {
+      'produccion': produccion,
+      'gestantes': gestantes,
+      'vacias': vacias < 0 ? 0 : vacias,
+    };
   }
 
   // ==================== PRODUCCIÓN Y FINANZAS ====================
