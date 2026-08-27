@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
 import '../theme/app_theme.dart';
+import '../widgets/custom_date_field.dart';
+import 'configuracion_screen.dart';
 
 class InventarioScreen extends StatefulWidget {
   const InventarioScreen({Key? key}) : super(key: key);
@@ -51,6 +53,13 @@ class _InventarioScreenState extends State<InventarioScreen> {
     String unidadSeleccionada = 'Sacos';
     final descripcionController = TextEditingController();
 
+    // Fechas en formato visual dd/mm/aaaa
+    final String fechaHoyISO = DateTime.now().toIso8601String().split('T')[0];
+    final fechaRegistroController = TextEditingController(
+      text: ConfiguracionScreen.formatearFechaVisual(fechaHoyISO),
+    );
+    final fechaVencimientoController = TextEditingController(); // Opcional o por defecto vacía
+
     showDialog(
       context: context,
       builder: (context) {
@@ -58,36 +67,52 @@ class _InventarioScreenState extends State<InventarioScreen> {
           builder: (context, setStateDialog) {
             return AlertDialog(
               title: const Text('Registrar Nuevo Producto'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: nombreController,
-                      decoration: const InputDecoration(labelText: 'Nombre del Insumo / Producto *'),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: cantidadController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(labelText: 'Stock Inicial *'),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      value: unidadSeleccionada,
-                      decoration: const InputDecoration(labelText: 'Unidad de Medida'),
-                      items: ['Sacos', 'Kilos', 'Litros', 'Unidades', 'Frascos', 'Dosis']
-                          .map((u) => DropdownMenuItem(value: u, child: Text(u)))
-                          .toList(),
-                      onChanged: (val) => setStateDialog(() => unidadSeleccionada = val!),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: descripcionController,
-                      decoration: const InputDecoration(labelText: 'Descripción / Ubicación (Opcional)'),
-                      maxLines: 2,
-                    ),
-                  ],
+              insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+              content: SizedBox(
+                width: MediaQuery.of(context).size.width * 0.9,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextField(
+                        controller: nombreController,
+                        decoration: const InputDecoration(labelText: 'Nombre del Insumo / Producto *'),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: cantidadController,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(labelText: 'Stock Inicial *'),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: unidadSeleccionada,
+                        decoration: const InputDecoration(labelText: 'Unidad de Medida'),
+                        items: ['Sacos', 'Kilos', 'Litros', 'Unidades', 'Frascos', 'Dosis']
+                            .map((u) => DropdownMenuItem(value: u, child: Text(u)))
+                            .toList(),
+                        onChanged: (val) => setStateDialog(() => unidadSeleccionada = val!),
+                      ),
+                      const SizedBox(height: 12),
+                      CustomDateField(
+                        controller: fechaRegistroController,
+                        labelText: 'Fecha de Registro (dd/mm/aaaa)',
+                        hintText: 'Ej: 26/08/2026',
+                      ),
+                      const SizedBox(height: 12),
+                      CustomDateField(
+                        controller: fechaVencimientoController,
+                        labelText: 'Fecha de Vencimiento (dd/mm/aaaa) (Opcional)',
+                        hintText: 'Ej: 26/08/2027',
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: descripcionController,
+                        decoration: const InputDecoration(labelText: 'Descripción / Ubicación (Opcional)'),
+                        maxLines: 2,
+                      ),
+                    ],
+                  ),
                 ),
               ),
               actions: [
@@ -112,13 +137,23 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
                     double cantidad = double.tryParse(cantidadController.text.trim()) ?? 0.0;
                     
+                    // Conversión de ambas fechas a ISO (YYYY-MM-DD)
+                    String fechaRegistroISO = fechaRegistroController.text.trim().isEmpty
+                        ? fechaHoyISO
+                        : _convertirFechaAISO(fechaRegistroController.text.trim());
+
+                    String? fechaVencimientoISO = fechaVencimientoController.text.trim().isEmpty
+                        ? null
+                        : _convertirFechaAISO(fechaVencimientoController.text.trim());
+
                     final db = await _dbHelper.database;
                     await db.insert('inventario', {
                       'nombre_producto': nombreController.text.trim(),
                       'stock_actual': cantidad,
                       'unidad_medida': unidadSeleccionada,
                       'categoria': descripcionController.text.trim().isEmpty ? 'General' : descripcionController.text.trim(),
-                      'fecha_vencimiento': DateTime.now().toIso8601String().split('T')[0],
+                      'fecha_registro': fechaRegistroISO,
+                      'fecha_vencimiento': fechaVencimientoISO,
                       'monto': 0.0,
                     });
 
@@ -293,7 +328,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Stock actual: ${item['stock_actual']} ${item['unidad_medida']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text('Stock actual: ${item['stock_actual']} ${item['unidad_medida']}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
               const SizedBox(height: 16),
               TextField(
                 controller: cantidadController,
@@ -321,10 +356,15 @@ class _InventarioScreenState extends State<InventarioScreen> {
                   double nuevoStock = esEntrada ? (stockActual + valor) : (stockActual - valor);
                   if (nuevoStock < 0) nuevoStock = 0;
 
+                  final String fechaHoyISO = DateTime.now().toIso8601String().split('T')[0];
+
                   final db = await _dbHelper.database;
                   await db.update(
                     'inventario',
-                    {'stock_actual': nuevoStock},
+                    {
+                      'stock_actual': nuevoStock,
+                      'fecha_vencimiento': fechaHoyISO, // Formato ISO para la BD
+                    },
                     where: 'id = ?',
                     whereArgs: [item['id']],
                   );
@@ -347,6 +387,8 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
   // Detalle desplegable inferior (Bottom Sheet)
   void _mostrarDetalleInventario(Map<String, dynamic> item) {
+    final String fechaVisual = ConfiguracionScreen.formatearFechaVisual(item['fecha_vencimiento']);
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -378,7 +420,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
               const SizedBox(height: 6),
               Text('Stock: ${item['stock_actual']} ${item['unidad_medida']}'),
               const SizedBox(height: 6),
-              Text('Última Actualización: ${item['fecha_vencimiento'] ?? 'N/D'}'),
+              Text('Última Actualización: $fechaVisual'),
               const SizedBox(height: 12),
               const Text('Descripción / Ubicación:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
               const SizedBox(height: 4),
@@ -389,6 +431,20 @@ class _InventarioScreenState extends State<InventarioScreen> {
         );
       },
     );
+  }
+
+  // Convertimos dd/mm/aaaa a YYYY-MM-DD para SQLite
+  String _convertirFechaAISO(String fechaVisual) {
+    try {
+      final partes = fechaVisual.split('/');
+      if (partes.length == 3) {
+        final dia = partes[0].padLeft(2, '0');
+        final mes = partes[1].padLeft(2, '0');
+        final anio = partes[2];
+        return '$anio-$mes-$dia';
+      }
+    } catch (_) {}
+    return fechaVisual;
   }
 
   @override
@@ -416,6 +472,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
                             padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
                             itemBuilder: (context, index) {
                               final item = _listaInventario[index];
+                              final String fechaVisual = ConfiguracionScreen.formatearFechaVisual(item['fecha_vencimiento']);
                               return Container(
                                 margin: const EdgeInsets.only(bottom: 12),
                                 decoration: BoxDecoration(
@@ -450,7 +507,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
                                       ),
                                       const SizedBox(height: 3),
                                       Text(
-                                        'Actualizado: ${item['fecha_vencimiento'] ?? ''}',
+                                        'Actualizado: $fechaVisual',
                                         style: const TextStyle(color: Color(0xFF6C8795), fontSize: 13),
                                       ),
                                     ],

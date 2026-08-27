@@ -2,7 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
 import '../theme/app_theme.dart';
-import 'configuracion_screen.dart'; // 1. Importa la pantalla de configuración
+import '../widgets/custom_date_field.dart';
+import 'configuracion_screen.dart'; // Importa la pantalla de configuración
 
 class FinanzasScreen extends StatefulWidget {
   const FinanzasScreen({Key? key}) : super(key: key);
@@ -15,7 +16,7 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
   final DatabaseHelper _dbHelper = DatabaseHelper();
   List<Map<String, dynamic>> _listaFinanzas = [];
   bool _isLoading = true;
-  String _simboloMoneda = 'Bs '; // 2. Variable para almacenar el símbolo dinámico
+  String _simboloMoneda = 'Bs '; // Variable para almacenar el símbolo dinámico
 
   @override
   void initState() {
@@ -56,6 +57,12 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
     final montoController = TextEditingController();
     final descripcionController = TextEditingController();
 
+    // Fecha actual formateada en dd/mm/aaaa igual que en GanadoScreen
+    final String fechaHoyISO = DateTime.now().toIso8601String().split('T')[0];
+    final fechaController = TextEditingController(
+      text: ConfiguracionScreen.formatearFechaVisual(fechaHoyISO),
+    );
+
     final Map<String, List<String>> categoriasPorTipo = {
       'Ingreso': ['Venta de Leche', 'Venta de Ganado', 'Venta de Queso', 'Otros Ingresos'],
       'Gasto': ['Alimento / Concentrado', 'Medicamentos / Sanidad', 'Mano de Obra', 'Mantenimiento', 'Otros Gastos'],
@@ -68,50 +75,59 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
           builder: (context, setStateDialog) {
             return AlertDialog(
               title: const Text('Registrar Movimiento Financiero'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    DropdownButtonFormField<String>(
-                      value: tipoSeleccionado,
-                      decoration: const InputDecoration(labelText: 'Tipo de Movimiento'),
-                      items: ['Ingreso', 'Gasto']
-                          .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                          .toList(),
-                      onChanged: (val) {
-                        setStateDialog(() {
-                          tipoSeleccionado = val!;
-                          categoriaSeleccionada = categoriasPorTipo[tipoSeleccionado]!.first;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      value: categoriaSeleccionada,
-                      decoration: const InputDecoration(labelText: 'Categoría'),
-                      items: categoriasPorTipo[tipoSeleccionado]!
-                          .map((cat) => DropdownMenuItem(value: cat, child: Text(cat)))
-                          .toList(),
-                      onChanged: (val) {
-                        setStateDialog(() {
-                          categoriaSeleccionada = val!;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: montoController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      // 3. Mostramos el símbolo dinámico en el label del input
-                      decoration: InputDecoration(labelText: 'Monto ($_simboloMoneda)'),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: descripcionController,
-                      decoration: const InputDecoration(labelText: 'Descripción / Detalle'),
-                      maxLines: 2,
-                    ),
-                  ],
+              insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+              content: SizedBox(
+                width: MediaQuery.of(context).size.width * 0.9,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      DropdownButtonFormField<String>(
+                        value: tipoSeleccionado,
+                        decoration: const InputDecoration(labelText: 'Tipo de Movimiento'),
+                        items: ['Ingreso', 'Gasto']
+                            .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                            .toList(),
+                        onChanged: (val) {
+                          setStateDialog(() {
+                            tipoSeleccionado = val!;
+                            categoriaSeleccionada = categoriasPorTipo[tipoSeleccionado]!.first;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: categoriaSeleccionada,
+                        decoration: const InputDecoration(labelText: 'Categoría'),
+                        items: categoriasPorTipo[tipoSeleccionado]!
+                            .map((cat) => DropdownMenuItem(value: cat, child: Text(cat)))
+                            .toList(),
+                        onChanged: (val) {
+                          setStateDialog(() {
+                            categoriaSeleccionada = val!;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      CustomDateField(
+                        controller: fechaController,
+                        labelText: 'Fecha de Registro (dd/mm/aaaa)',
+                        hintText: 'Ej: 26/08/2026',
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: montoController,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: InputDecoration(labelText: 'Monto ($_simboloMoneda)'),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: descripcionController,
+                        decoration: const InputDecoration(labelText: 'Descripción / Detalle'),
+                        maxLines: 2,
+                      ),
+                    ],
+                  ),
                 ),
               ),
               actions: [
@@ -123,11 +139,16 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
                   onPressed: () async {
                     double? monto = double.tryParse(montoController.text.trim());
                     if (monto != null && monto > 0) {
+                      // Convertimos dd/mm/aaaa a YYYY-MM-DD para SQLite
+                      String fechaISO = fechaController.text.trim().isEmpty
+                          ? fechaHoyISO
+                          : _convertirFechaAISO(fechaController.text.trim());
+
                       await _dbHelper.insertFinanza({
                         'tipo': tipoSeleccionado,
                         'categoria': categoriaSeleccionada,
                         'monto': monto,
-                        'fecha': DateTime.now().toIso8601String().split('T')[0],
+                        'fecha': fechaISO,
                         'descripcion': descripcionController.text.trim(),
                       });
                       Navigator.pop(context);
@@ -151,6 +172,8 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
   // Modal desplegable (Bottom Sheet) para ver el detalle al hacer clic en una tarjeta
   void _mostrarDetalleFinanza(Map<String, dynamic> item) {
     bool esIngreso = item['tipo'] == 'Ingreso';
+    final String fechaVisual = ConfiguracionScreen.formatearFechaVisual(item['fecha']);
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -186,10 +209,9 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
               const SizedBox(height: 6),
               Text('Categoría: ${item['categoria']}'),
               const SizedBox(height: 6),
-              // 4. Usamos la variable de moneda aquí
               Text('Monto: $_simboloMoneda${item['monto']}'),
               const SizedBox(height: 6),
-              Text('Fecha: ${item['fecha']}'),
+              Text('Fecha: $fechaVisual'),
               const SizedBox(height: 12),
               const Text('Descripción:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
               const SizedBox(height: 4),
@@ -200,6 +222,20 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
         );
       },
     );
+  }
+
+  // Convierte '26/08/2026' a '2026-08-26' para SQLite
+  String _convertirFechaAISO(String fechaVisual) {
+    try {
+      final partes = fechaVisual.split('/');
+      if (partes.length == 3) {
+        final dia = partes[0].padLeft(2, '0');
+        final mes = partes[1].padLeft(2, '0');
+        final anio = partes[2];
+        return '$anio-$mes-$dia';
+      }
+    } catch (_) {}
+    return fechaVisual;
   }
 
   @override
@@ -222,6 +258,7 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
                     itemBuilder: (context, index) {
                       final item = _listaFinanzas[index];
                       bool esIngreso = item['tipo'] == 'Ingreso';
+                      final String fechaVisual = ConfiguracionScreen.formatearFechaVisual(item['fecha']);
                       return Card(
                         elevation: 2,
                         margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
@@ -234,12 +271,11 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
                             ),
                           ),
                           title: Text(
-                            // 5. Aplicamos el símbolo dinámico en el título de la tarjeta
                             '${item['categoria']} - $_simboloMoneda${item['monto']}',
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                           subtitle: Text(
-                            'Tipo: ${item['tipo']} | Fecha: ${item['fecha']}',
+                            'Tipo: ${item['tipo']} | Fecha: $fechaVisual',
                           ),
                           trailing: const Icon(Icons.info_outline, color: Colors.grey),
                           onTap: () => _mostrarDetalleFinanza(item),

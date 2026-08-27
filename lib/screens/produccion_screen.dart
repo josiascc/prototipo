@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
 import '../theme/app_theme.dart';
+import '../widgets/custom_date_field.dart';
+import 'configuracion_screen.dart';
 
 class ProduccionScreen extends StatefulWidget {
   const ProduccionScreen({Key? key}) : super(key: key);
@@ -20,20 +22,30 @@ class _ProduccionScreenState extends State<ProduccionScreen> {
     _cargarProduccion();
   }
 
-  // Consultar registros de producción ordenados por ID descendente
+  // Convierte '26/08/2026' a '2026-08-26' para SQLite
+  String _convertirFechaAISO(String fechaVisual) {
+    try {
+      final partes = fechaVisual.split('/');
+      if (partes.length == 3) {
+        final dia = partes[0].padLeft(2, '0');
+        final mes = partes[1].padLeft(2, '0');
+        final anio = partes[2];
+        return '$anio-$mes-$dia';
+      }
+    } catch (_) {}
+    return fechaVisual;
+  }
+
   Future<void> _cargarProduccion() async {
     setState(() => _isLoading = true);
-    
     final db = await _dbHelper.database;
     final data = await db.query('produccion', orderBy: 'id DESC');
-
     setState(() {
       _listaProduccion = data;
       _isLoading = false;
     });
   }
 
-  // Modal para registrar una nueva producción de leche
   void _mostrarModalRegistrarProduccion() async {
     List<Map<String, dynamic>> animalesActivos = await _dbHelper.queryAllGanadoActivo();
     
@@ -47,6 +59,12 @@ class _ProduccionScreenState extends State<ProduccionScreen> {
     final litrosController = TextEditingController();
     final notasController = TextEditingController();
 
+    // Muestra por defecto la fecha de hoy en formato visual dd/mm/aaaa
+    final String fechaHoyISO = DateTime.now().toIso8601String().split('T')[0];
+    final fechaController = TextEditingController(
+      text: ConfiguracionScreen.formatearFechaVisual(fechaHoyISO),
+    );
+
     if (!mounted) return;
 
     showDialog(
@@ -56,51 +74,53 @@ class _ProduccionScreenState extends State<ProduccionScreen> {
           builder: (context, setStateDialog) {
             return AlertDialog(
               title: const Text('Registrar Producción de Leche'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    DropdownButtonFormField<String>(
-                      value: areteSeleccionado,
-                      decoration: const InputDecoration(labelText: 'Arete o Destino'),
-                      items: opcionesArete.map((val) {
-                        return DropdownMenuItem<String>(
-                          value: val,
-                          child: Text(val == 'GENERAL_FINCA' ? 'General Finca' : 'Arete: $val'),
-                        );
-                      }).toList(),
-                      onChanged: (val) {
-                        setStateDialog(() {
-                          areteSeleccionado = val!;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      value: turnoSeleccionado,
-                      decoration: const InputDecoration(labelText: 'Turno de Ordeño'),
-                      items: ['Mañana', 'Tarde']
-                          .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                          .toList(),
-                      onChanged: (val) {
-                        setStateDialog(() {
-                          turnoSeleccionado = val!;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: litrosController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(labelText: 'Litros Producidos'),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: notasController,
-                      decoration: const InputDecoration(labelText: 'Notas adicionales (Opcional)'),
-                      maxLines: 2,
-                    ),
-                  ],
+              insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+              content: SizedBox(
+                width: MediaQuery.of(context).size.width * 0.9,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      DropdownButtonFormField<String>(
+                        value: areteSeleccionado,
+                        decoration: const InputDecoration(labelText: 'Arete o Destino'),
+                        items: opcionesArete.map((val) {
+                          return DropdownMenuItem<String>(
+                            value: val,
+                            child: Text(val == 'GENERAL_FINCA' ? 'General Finca' : 'Arete: $val'),
+                          );
+                        }).toList(),
+                        onChanged: (val) => setStateDialog(() => areteSeleccionado = val!),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: turnoSeleccionado,
+                        decoration: const InputDecoration(labelText: 'Turno de Ordeño'),
+                        items: ['Mañana', 'Tarde']
+                            .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                            .toList(),
+                        onChanged: (val) => setStateDialog(() => turnoSeleccionado = val!),
+                      ),
+                      const SizedBox(height: 12),
+                      CustomDateField(
+                        controller: fechaController,
+                        labelText: 'Fecha de Registro (dd/mm/aaaa)',
+                        hintText: 'Ej: 26/08/2026',
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: litrosController,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(labelText: 'Litros Producidos'),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: notasController,
+                        decoration: const InputDecoration(labelText: 'Notas adicionales (Opcional)'),
+                        maxLines: 2,
+                      ),
+                    ],
+                  ),
                 ),
               ),
               actions: [
@@ -112,11 +132,16 @@ class _ProduccionScreenState extends State<ProduccionScreen> {
                   onPressed: () async {
                     double? litros = double.tryParse(litrosController.text.trim());
                     if (litros != null && litros > 0) {
+                      // Convertimos dd/mm/aaaa a YYYY-MM-DD para SQLite
+                      String fechaISO = fechaController.text.trim().isEmpty
+                          ? fechaHoyISO
+                          : _convertirFechaAISO(fechaController.text.trim());
+
                       await _dbHelper.insertProduccion({
                         'arete_asociado': areteSeleccionado,
                         'turno': turnoSeleccionado,
                         'litros': litros,
-                        'fecha': DateTime.now().toIso8601String().split('T')[0],
+                        'fecha': fechaISO,
                         'notas': notasController.text.trim(),
                       });
                       Navigator.pop(context);
@@ -137,8 +162,9 @@ class _ProduccionScreenState extends State<ProduccionScreen> {
     );
   }
 
-  // Modal desplegable (Bottom Sheet) para ver el detalle al hacer clic en una tarjeta
   void _mostrarDetalleProduccion(Map<String, dynamic> item) {
+    final String fechaVisual = ConfiguracionScreen.formatearFechaVisual(item['fecha']);
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -172,7 +198,7 @@ class _ProduccionScreenState extends State<ProduccionScreen> {
               const SizedBox(height: 6),
               Text('Litros: ${item['litros']} L'),
               const SizedBox(height: 6),
-              Text('Fecha: ${item['fecha']}'),
+              Text('Fecha: $fechaVisual'),
               const SizedBox(height: 12),
               const Text('Notas:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
               const SizedBox(height: 4),
@@ -204,6 +230,7 @@ class _ProduccionScreenState extends State<ProduccionScreen> {
                     padding: const EdgeInsets.all(8.0),
                     itemBuilder: (context, index) {
                       final item = _listaProduccion[index];
+                      final String fechaVisual = ConfiguracionScreen.formatearFechaVisual(item['fecha']);
                       return Card(
                         elevation: 2,
                         margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
@@ -217,7 +244,7 @@ class _ProduccionScreenState extends State<ProduccionScreen> {
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                           subtitle: Text(
-                            'Origen: ${item['arete_asociado']} | Fecha: ${item['fecha']}',
+                            'Origen: ${item['arete_asociado']} | Fecha: $fechaVisual',
                           ),
                           trailing: const Icon(Icons.info_outline, color: Colors.grey),
                           onTap: () => _mostrarDetalleProduccion(item),

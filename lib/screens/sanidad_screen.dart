@@ -2,6 +2,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
 import '../theme/app_theme.dart';
+import '../widgets/custom_date_field.dart';
+import 'configuracion_screen.dart';
 
 class SanidadScreen extends StatefulWidget {
   const SanidadScreen({Key? key}) : super(key: key);
@@ -26,6 +28,22 @@ class _SanidadScreenState extends State<SanidadScreen> {
     _cargarSanidad();
   }
 
+  // Convierte '26/08/2026' a '2026-08-26' para SQLite y DateTime.parse
+  String _convertirFechaAISO(String fechaVisual) {
+    if (fechaVisual.isEmpty) return DateTime.now().toIso8601String().split('T')[0];
+    if (fechaVisual.contains('-')) return fechaVisual;
+    try {
+      final partes = fechaVisual.split('/');
+      if (partes.length == 3) {
+        final dia = partes[0].padLeft(2, '0');
+        final mes = partes[1].padLeft(2, '0');
+        final anio = partes[2];
+        return '$anio-$mes-$dia';
+      }
+    } catch (_) {}
+    return fechaVisual;
+  }
+
   // Consultar historial de sanidad con datos del ganado asociado
   Future<void> _cargarSanidad() async {
     setState(() => _isLoading = true);
@@ -46,7 +64,7 @@ class _SanidadScreenState extends State<SanidadScreen> {
 
   // Modal para registrar un nuevo tratamiento sanitario de forma dinámica
   void _mostrarModalRegistrarSanidad({String tipoInicial = 'Vacunacion'}) async {
-    setState(() => _menuFabAbierto = false); // Cierra el menú flotante si estaba abierto
+    setState(() => _menuFabAbierto = false);
     List<Map<String, dynamic>> animalesActivos = await _dbHelper.queryAllGanadoActivo();
 
     if (animalesActivos.isEmpty) {
@@ -57,14 +75,17 @@ class _SanidadScreenState extends State<SanidadScreen> {
       return;
     }
 
-    // Usamos el tipoInicial directamente como categoría fija (en minúsculas o formato interno)
     String tipoSeleccionado = tipoInicial.toLowerCase(); 
     if (tipoSeleccionado == 'fumigacion/baño') {
       tipoSeleccionado = 'fumigacion';
     }
 
+    // Inicializamos la fecha actual formateada en dd/mm/aaaa
+    final String fechaHoyISO = DateTime.now().toIso8601String().split('T')[0];
+    final String fechaHoyFormateada = ConfiguracionScreen.formatearFechaVisual(fechaHoyISO);
+
     // Controladores comunes y específicos
-    final fechaController = TextEditingController(text: DateTime.now().toIso8601String().split('T')[0]);
+    final fechaController = TextEditingController(text: fechaHoyFormateada);
     final productoController = TextEditingController();
     final veterinarioController = TextEditingController();
     final loteController = TextEditingController();
@@ -97,7 +118,6 @@ class _SanidadScreenState extends State<SanidadScreen> {
 
     if (!mounted) return;
 
-    // Título dinámico según el tipo seleccionado
     String obtenerTituloFormulario() {
       switch (tipoSeleccionado) {
         case 'vacunacion': return 'Registrar Vacunación';
@@ -114,7 +134,6 @@ class _SanidadScreenState extends State<SanidadScreen> {
         return StatefulBuilder(
           builder: (context, setStateDialog) {
             
-            // Función auxiliar para abrir el buscador y seleccionar animales
             Future<void> _abrirBuscadorAnimales() async {
               String queryBusqueda = '';
               await showDialog(
@@ -234,7 +253,12 @@ class _SanidadScreenState extends State<SanidadScreen> {
                           decoration: const InputDecoration(labelText: 'Producto / Nombre Comercial *'),
                         ),
                         const SizedBox(height: 12),
-                        _buildCampoFecha(context, fechaController, 'Fecha de Aplicación', setStateDialog),
+                        CustomDateField(
+                          controller: fechaController,
+                          labelText: 'Fecha de Aplicación (dd/mm/aaaa)',
+                          hintText: 'Ej: 26/08/2026',
+                          lastDate: DateTime(2100),
+                        ),
                         const SizedBox(height: 12),
                         _buildStepperControl('Dosis en ml', dosisVacuna, 1, 100, (val) => dosisVacuna = val, setStateDialog),
                         const SizedBox(height: 12),
@@ -270,7 +294,12 @@ class _SanidadScreenState extends State<SanidadScreen> {
                           decoration: const InputDecoration(labelText: 'Producto / Nombre Comercial *'),
                         ),
                         const SizedBox(height: 12),
-                        _buildCampoFecha(context, fechaController, 'Fecha de Aplicación', setStateDialog),
+                        CustomDateField(
+                          controller: fechaController,
+                          labelText: 'Fecha de Aplicación (dd/mm/aaaa)',
+                          hintText: 'Ej: 26/08/2026',
+                          lastDate: DateTime(2100),
+                        ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
                           value: metodoFumigacionSeleccionado,
@@ -308,7 +337,12 @@ class _SanidadScreenState extends State<SanidadScreen> {
                           decoration: const InputDecoration(labelText: 'Producto / Nombre Comercial *'),
                         ),
                         const SizedBox(height: 12),
-                        _buildCampoFecha(context, fechaController, 'Fecha de Aplicación', setStateDialog),
+                        CustomDateField(
+                          controller: fechaController,
+                          labelText: 'Fecha de Aplicación (dd/mm/aaaa)',
+                          hintText: 'Ej: 26/08/2026',
+                          lastDate: DateTime(2100),
+                        ),
                         const SizedBox(height: 12),
                         _buildStepperControl('Dosis en ml', dosisDesparasitacion, 1, 200, (val) => dosisDesparasitacion = val, setStateDialog),
                         const SizedBox(height: 12),
@@ -353,7 +387,12 @@ class _SanidadScreenState extends State<SanidadScreen> {
                           decoration: const InputDecoration(labelText: 'Medicamento *'),
                         ),
                         const SizedBox(height: 12),
-                        _buildCampoFecha(context, fechaController, 'Fecha de Inicio', setStateDialog),
+                        CustomDateField(
+                          controller: fechaController,
+                          labelText: 'Fecha de Inicio',
+                          hintText: 'Ej: 26/08/2026',
+                          lastDate: DateTime(2100),
+                        ),
                         const SizedBox(height: 12),
                         _buildStepperControlInt('Duración', duracionDias, 1, 90, (val) => duracionDias = val, setStateDialog),
                         const SizedBox(height: 12),
@@ -485,6 +524,8 @@ class _SanidadScreenState extends State<SanidadScreen> {
                       return;
                     }
 
+                    String fechaISO = _convertirFechaAISO(fechaController.text.trim());
+
                     for (var animal in animalesSeleccionados) {
                       String tipoCategoria = tipoSeleccionado; 
                       String tipoEspecifico = '';
@@ -509,7 +550,7 @@ class _SanidadScreenState extends State<SanidadScreen> {
                         'categoria_sanitaria': tipoCategoria,
                         'tipo_especifico': tipoEspecifico,
                         'producto': productoVal,
-                        'fecha': fechaController.text,
+                        'fecha': fechaISO,
                         'dosis': dosisStr.isEmpty ? null : dosisStr,
                         'via_aplicacion': viaStr.isEmpty ? null : viaStr,
                         'lote': loteController.text.trim().isEmpty ? null : loteController.text.trim(),
@@ -533,31 +574,6 @@ class _SanidadScreenState extends State<SanidadScreen> {
             );
           },
         );
-      },
-    );
-  }
-
-  // Métodos auxiliares para los campos de fecha y steppers numéricos
-  Widget _buildCampoFecha(BuildContext context, TextEditingController controller, String label, StateSetter setStateDialog) {
-    return TextField(
-      controller: controller,
-      decoration: InputDecoration(
-        labelText: label,
-        suffixIcon: const Icon(Icons.calendar_today, size: 20),
-      ),
-      readOnly: true,
-      onTap: () async {
-        DateTime? pickedDate = await showDatePicker(
-          context: context,
-          initialDate: DateTime.now(),
-          firstDate: DateTime(2000),
-          lastDate: DateTime(2100),
-        );
-        if (pickedDate != null) {
-          setStateDialog(() {
-            controller.text = pickedDate.toIso8601String().split('T')[0];
-          });
-        }
       },
     );
   }
@@ -636,7 +652,6 @@ class _SanidadScreenState extends State<SanidadScreen> {
   Widget build(BuildContext context) {
     final textoBusqueda = _searchController.text.trim().toLowerCase();
     final listaFiltrada = _listaSanidad.where((item) {
-      // Usamos categoria_sanitaria en lugar de tipo_tratamiento
       final categoriaSanitaria = (item['categoria_sanitaria'] ?? '').toString().toLowerCase();
       final tipoEspecifico = (item['tipo_especifico'] ?? '').toString().toLowerCase();
       
@@ -683,6 +698,8 @@ class _SanidadScreenState extends State<SanidadScreen> {
                               final String? fotoPath = item['animal_foto'];
                               final String? sexoAnimal = item['animal_sexo'];
                               bool esArchivoLocal = fotoPath != null && fotoPath.isNotEmpty && File(fotoPath).existsSync();
+                              
+                              final String fechaVisual = ConfiguracionScreen.formatearFechaVisual(item['fecha']);
 
                               return Container(
                                 margin: const EdgeInsets.only(bottom: 12),
@@ -720,7 +737,7 @@ class _SanidadScreenState extends State<SanidadScreen> {
                                       const SizedBox(height: 4),
                                       Text('Producto: ${item['producto']}', style: const TextStyle(color: Color(0xFF6C8795), fontSize: 14)),
                                       const SizedBox(height: 3),
-                                      Text('Fecha: ${item['fecha']}', style: const TextStyle(color: Color(0xFF6C8795), fontSize: 13)),
+                                      Text('Fecha: $fechaVisual', style: const TextStyle(color: Color(0xFF6C8795), fontSize: 13)),
                                     ],
                                   ),
                                   trailing: Container(
@@ -743,7 +760,6 @@ class _SanidadScreenState extends State<SanidadScreen> {
             ],
           ),
 
-          // Botón flotante pequeño de filtros en la esquina superior derecha
           Positioned(
             top: 8,
             right: 16,
@@ -771,7 +787,7 @@ class _SanidadScreenState extends State<SanidadScreen> {
                     Icon(Icons.filter_list, size: 16, color: AppTheme.primaryGreen),
                     const SizedBox(width: 4),
                     Text(
-                      _obtenerNombreFiltroCorto(_filtroActivo), // Muestra exactamente la opción seleccionada
+                      _obtenerNombreFiltroCorto(_filtroActivo),
                       style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primaryGreen),
                     ),
                     const SizedBox(width: 4),
@@ -795,14 +811,12 @@ class _SanidadScreenState extends State<SanidadScreen> {
             ),
           ),
           
-          // Overlay oscuro cuando el menú del FAB está abierto
           if (_menuFabAbierto)
             GestureDetector(
               onTap: () => setState(() => _menuFabAbierto = false),
               child: Container(color: Colors.black.withOpacity(0.5)),
             ),
 
-          // Menú Desplegable del FAB flotante
           if (_menuFabAbierto)
             Positioned(
               right: 20,
@@ -864,6 +878,8 @@ class _SanidadScreenState extends State<SanidadScreen> {
   }
 
   void _mostrarDetalleSanidad(Map<String, dynamic> item) {
+    final String fechaVisual = ConfiguracionScreen.formatearFechaVisual(item['fecha']);
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -897,7 +913,7 @@ class _SanidadScreenState extends State<SanidadScreen> {
               const SizedBox(height: 6),
               Text('Producto: ${item['producto']}'),
               const SizedBox(height: 6),
-              Text('Fecha: ${item['fecha']}'),
+              Text('Fecha: $fechaVisual'),
               const SizedBox(height: 12),
               const Text('Observaciones:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
               const SizedBox(height: 4),

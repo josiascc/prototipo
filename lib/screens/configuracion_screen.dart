@@ -27,6 +27,26 @@ class ConfiguracionScreen extends StatefulWidget {
     return prefs.getString('nombre_finca') ?? 'GanaderoPro - Finca Principal';
   }
 
+  // ==================== MÉTODO AUXILIAR DE FECHA ====================
+  static String formatearFechaVisual(String? fechaStr) {
+    if (fechaStr == null || fechaStr.isEmpty) return 'No registrada';
+    
+    // Si ya tiene el formato dd/mm/aaaa
+    if (fechaStr.contains('/')) {
+      return fechaStr;
+    }
+    
+    // Si viene en formato ISO yyyy-mm-dd (ej: '2026-08-26')
+    try {
+      final partes = fechaStr.split('T')[0].split('-');
+      if (partes.length == 3) {
+        return '${partes[2]}/${partes[1]}/${partes[0]}';
+      }
+    } catch (_) {}
+    
+    return fechaStr;
+  }
+
   @override
   State<ConfiguracionScreen> createState() => _ConfiguracionScreenState();
 }
@@ -201,8 +221,7 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen> {
 
       // URL de tu futuro archivo version.json en la nube (ej. GitHub Gist Raw)
       // Mientras no exista o no tenga conexión, capturará el error de forma limpia o asumirá que está al día.
-      const urlVersionJson = 'https://gist.githubusercontent.com/tu-usuario/tu-id/raw/version.json';
-
+      const urlVersionJson = 'https://raw.githubusercontent.com/josiascc/prototipo/main/version.json';
       bool hayNuevaVersion = false;
       String versionRemota = versionActual;
       String urlApkDescarga = '';

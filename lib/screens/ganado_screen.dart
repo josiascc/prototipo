@@ -5,6 +5,9 @@ import 'package:path/path.dart' as p;
 import '../database/database_helper.dart';
 import '../theme/app_theme.dart';
 import '../widgets/animal_selector_dropdown.dart';
+import 'ganado_detalle_screen.dart';
+import '../widgets/custom_date_field.dart';
+import 'configuracion_screen.dart'; // <--- 1. Importa configuracion_screen.dart
 
 class GanadoScreen extends StatefulWidget {
   const GanadoScreen({Key? key}) : super(key: key);
@@ -41,12 +44,14 @@ class _GanadoScreenState extends State<GanadoScreen> {
     final _areteController = TextEditingController();
     final _nombreController = TextEditingController();
     final _fechaNacimientoController = TextEditingController();
+    
+    // 2. Aplicamos formatearFechaVisual a la fecha actual por defecto
+    final String fechaHoyISO = DateTime.now().toIso8601String().split('T')[0];
     final _fechaIngresoController = TextEditingController(
-      text: DateTime.now().toIso8601String().split('T')[0],
+      text: ConfiguracionScreen.formatearFechaVisual(fechaHoyISO),
     );
 
     String _categoriaSeleccionada = 'Vaca';
-    String _sexoSeleccionado = 'Hembra';
     String _razaSeleccionada = 'Mestizo / Cruce';
     bool _incluirFechaIngreso = false;
     
@@ -89,39 +94,18 @@ class _GanadoScreenState extends State<GanadoScreen> {
                         decoration: const InputDecoration(labelText: 'Nombre (Opcional)'),
                       ),
                       const SizedBox(height: 12),
-                      // Categoría y Sexo uno al lado del otro
-                      Row(
-                        children: [
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              value: _categoriaSeleccionada,
-                              decoration: const InputDecoration(labelText: 'Categoría'),
-                              items: ['Vaca', 'Toro', 'Ternero', 'Novilla', 'Ceba']
-                                  .map((cat) => DropdownMenuItem(value: cat, child: Text(cat)))
-                                  .toList(),
-                              onChanged: (val) {
-                                setStateDialog(() {
-                                  _categoriaSeleccionada = val!;
-                                });
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              value: _sexoSeleccionado,
-                              decoration: const InputDecoration(labelText: 'Sexo'),
-                              items: ['Hembra', 'Macho']
-                                  .map((sex) => DropdownMenuItem(value: sex, child: Text(sex)))
-                                  .toList(),
-                              onChanged: (val) {
-                                setStateDialog(() {
-                                  _sexoSeleccionado = val!;
-                                });
-                              },
-                            ),
-                          ),
-                        ],
+                      // Categoría (El sexo se determina automáticamente)
+                      DropdownButtonFormField<String>(
+                        value: _categoriaSeleccionada,
+                        decoration: const InputDecoration(labelText: 'Categoría'),
+                        items: ['Vaca', 'Toro', 'Ternero', 'Novilla', 'Ceba']
+                            .map((cat) => DropdownMenuItem(value: cat, child: Text(cat)))
+                            .toList(),
+                        onChanged: (val) {
+                          setStateDialog(() {
+                            _categoriaSeleccionada = val!;
+                          });
+                        },
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
@@ -138,27 +122,10 @@ class _GanadoScreenState extends State<GanadoScreen> {
                         },
                       ),
                       const SizedBox(height: 12),
-                      TextField(
+                      CustomDateField(
                         controller: _fechaNacimientoController,
-                        decoration: const InputDecoration(
-                          labelText: 'Fecha de Nacimiento (AAAA-MM-DD)',
-                          hintText: 'Ej: 2024-01-15',
-                        ),
-                        readOnly: true,
-                        onTap: () async {
-                          DateTime? pickedDate = await showDatePicker(
-                            context: context,
-                            initialDate: DateTime.now(),
-                            firstDate: DateTime(2000),
-                            lastDate: DateTime.now(),
-                          );
-                          if (pickedDate != null) {
-                            setStateDialog(() {
-                              _fechaNacimientoController.text =
-                                  pickedDate.toIso8601String().split('T')[0];
-                            });
-                          }
-                        },
+                        labelText: 'Fecha de Nacimiento (dd/mm/aaaa)',
+                        hintText: 'Ej: 15/01/2024',
                       ),
                       const SizedBox(height: 12),
                       Row(
@@ -175,26 +142,10 @@ class _GanadoScreenState extends State<GanadoScreen> {
                         ],
                       ),
                       if (_incluirFechaIngreso) ... [
-                        TextField(
+                        CustomDateField(
                           controller: _fechaIngresoController,
-                          decoration: const InputDecoration(
-                            labelText: 'Fecha de Ingreso (AAAA-MM-DD)',
-                          ),
-                          readOnly: true,
-                          onTap: () async {
-                            DateTime? pickedDate = await showDatePicker(
-                              context: context,
-                              initialDate: DateTime.now(),
-                              firstDate: DateTime(2000),
-                              lastDate: DateTime.now(),
-                            );
-                            if (pickedDate != null) {
-                              setStateDialog(() {
-                                _fechaIngresoController.text =
-                                    pickedDate.toIso8601String().split('T')[0];
-                              });
-                            }
-                          },
+                          labelText: 'Fecha de Ingreso (dd/mm/aaaa)',
+                          hintText: 'Ej: 26/08/2026',
                         ),
                         const SizedBox(height: 12),
                       ],
@@ -314,33 +265,42 @@ class _GanadoScreenState extends State<GanadoScreen> {
                 ),
                 ElevatedButton(
                   onPressed: () async {
-                    if (_areteController.text.isNotEmpty) {
-                      String? rutaFotoFinal;
-                      if (_imagenSeleccionada != null) {
-                        rutaFotoFinal = await _guardarFotoEnCarpetaFotos(
-                          _imagenSeleccionada!,
-                          _areteController.text,
-                        );
-                      }
-
-                      await _dbHelper.insertGanado({
-                        'arete': _areteController.text.trim(),
-                        'nombre': _nombreController.text.trim().isEmpty ? null : _nombreController.text.trim(),
-                        'categoria': _categoriaSeleccionada,
-                        'raza': _razaSeleccionada,
-                        'sexo': _sexoSeleccionado,
-                        'fecha_nacimiento': _fechaNacimientoController.text.trim().isEmpty ? null : _fechaNacimientoController.text.trim(),
-                        'fecha_ingreso': _incluirFechaIngreso ? _fechaIngresoController.text.trim() : null,
-                        'estado': 'Activo',
-                        'madre_id': _madreIdSeleccionada,
-                        'padre_id': _padreIdSeleccionado,
-                        'madre_arete': _madreAreteStr,
-                        'padre_arete': _padreAreteStr,
-                        'foto': rutaFotoFinal,
-                      });
-                      Navigator.pop(context);
-                      _cargarGanado();
+                    if (_areteController.text.trim().isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('El número de arete es obligatorio.')),
+                      );
+                      return;
                     }
+
+                    String? rutaFotoFinal;
+                    if (_imagenSeleccionada != null) {
+                      rutaFotoFinal = await _guardarFotoEnCarpetaFotos(
+                        _imagenSeleccionada!,
+                        _areteController.text,
+                      );
+                    }
+
+                    await _dbHelper.insertGanado({
+                      'arete': _areteController.text.trim(),
+                      'nombre': _nombreController.text.trim().isEmpty ? null : _nombreController.text.trim(),
+                      'categoria': _categoriaSeleccionada,
+                      'raza': _razaSeleccionada,
+                      'sexo': _obtenerSexoPorCategoria(_categoriaSeleccionada),
+                      'fecha_nacimiento': _fechaNacimientoController.text.trim().isEmpty
+                          ? null
+                          : _convertirFechaAISO(_fechaNacimientoController.text.trim()),
+                      'fecha_ingreso': _incluirFechaIngreso && _fechaIngresoController.text.trim().isNotEmpty
+                          ? _convertirFechaAISO(_fechaIngresoController.text.trim())
+                          : null,
+                      'estado': 'Activo',
+                      'madre_id': _madreIdSeleccionada,
+                      'padre_id': _padreIdSeleccionado,
+                      'madre_arete': _madreAreteStr,
+                      'padre_arete': _padreAreteStr,
+                      'foto': rutaFotoFinal,
+                    });
+                    Navigator.pop(context);
+                    _cargarGanado();
                   },
                   child: const Text('Guardar'),
                 ),
@@ -382,6 +342,27 @@ class _GanadoScreenState extends State<GanadoScreen> {
       print('Error al guardar la foto: $e');
       return null;
     }
+  }
+
+  String _obtenerSexoPorCategoria(String categoria) {
+      if (categoria == 'Vaca' || categoria == 'Novilla') {
+        return 'Hembra';
+      }
+      return 'Macho'; // Toro, Ternero, Ceba
+    }
+
+  // Convierte '26/08/2026' a '2026-08-26' para SQLite
+  String _convertirFechaAISO(String fechaVisual) {
+    try {
+      final partes = fechaVisual.split('/');
+      if (partes.length == 3) {
+        final dia = partes[0].padLeft(2, '0');
+        final mes = partes[1].padLeft(2, '0');
+        final anio = partes[2];
+        return '$anio-$mes-$dia';
+      }
+    } catch (_) {}
+    return fechaVisual;
   }
 
   @override
@@ -433,10 +414,18 @@ class _GanadoScreenState extends State<GanadoScreen> {
                           'Categoría: ${animal['categoria']} | Raza: ${animal['raza']}',
                         ),
                         trailing: const Icon(Icons.chevron_right),
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Seleccionaste el arete: ${animal['arete']}')),
+                        onTap: () async {
+                          final eliminado = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => GanadoDetalleScreen(animal: animal),
+                            ),
                           );
+                          
+                          // Si se eliminó el animal, recargamos la lista
+                          if (eliminado == true) {
+                            _cargarGanado();
+                          }
                         },
                       ),
                     );

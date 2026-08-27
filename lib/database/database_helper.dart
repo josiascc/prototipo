@@ -96,6 +96,7 @@ class DatabaseHelper {
         tipo_evento TEXT, 
         diagnostico TEXT, 
         fecha TEXT,
+        fecha_servicio TEXT, -- <--- NUEVA COLUMNA PARA GUARDAR LA FECHA DE CRUCE/INSEMINACIÓN
         notas TEXT,
         FOREIGN KEY (ganado_id) REFERENCES ganado (id) ON DELETE CASCADE
       )
@@ -124,6 +125,7 @@ class DatabaseHelper {
         categoria TEXT, 
         stock_actual REAL,
         unidad_medida TEXT, 
+        fecha_registro TEXT,
         fecha_vencimiento TEXT,
         monto REAL 
       )
@@ -397,7 +399,11 @@ class DatabaseHelper {
   // ==================== ACTIVIDADES ====================
   Future<List<Map<String, dynamic>>> queryActividadesPendientes() async {
     Database db = await database;
-    return await db.query('actividades', where: 'completada = 0', orderBy: 'fecha_programada ASC');
+    return await db.query(
+      'actividades',
+      where: 'completada = 0',
+      orderBy: "CASE WHEN tipo_lote LIKE '%Reproducción%' THEN 0 ELSE 1 END, fecha_programada ASC",
+    );
   }
 
   Future<int> insertarActividad(Map<String, dynamic> row) async {
@@ -408,5 +414,83 @@ class DatabaseHelper {
   Future<int> completarActividad(int id) async {
     Database db = await database;
     return await db.update('actividades', {'completada': 1}, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> deleteGanado(int id) async {
+    Database db = await database;
+    return await db.delete('ganado', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ==================== CONSULTAS POR RANGO DE FECHAS ====================
+  Future<double> getTotalLecheRango(String fechaInicioISO, String fechaFinISO) async {
+    Database db = await database;
+    var result = await db.rawQuery(
+      "SELECT SUM(litros) as total FROM produccion WHERE fecha >= ? AND fecha <= ?",
+      [fechaInicioISO, fechaFinISO]
+    );
+    return (result.first['total'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  Future<Map<String, double>> getBalanceFinancieroRango(String fechaInicioISO, String fechaFinISO) async {
+    Database db = await database;
+    var ingresosRes = await db.rawQuery(
+      "SELECT SUM(monto) as total FROM finanzas WHERE tipo = 'Ingreso' AND fecha >= ? AND fecha <= ?",
+      [fechaInicioISO, fechaFinISO]
+    );
+    var gastosRes = await db.rawQuery(
+      "SELECT SUM(monto) as total FROM finanzas WHERE tipo = 'Gasto' AND fecha >= ? AND fecha <= ?",
+      [fechaInicioISO, fechaFinISO]
+    );
+
+    double ingresos = (ingresosRes.first['total'] as num?)?.toDouble() ?? 0.0;
+    double gastos = (gastosRes.first['total'] as num?)?.toDouble() ?? 0.0;
+
+    return {
+      'ingresos': ingresos,
+      'gastos': gastos,
+      'balance': ingresos - gastos,
+    };
+  }
+
+  // ==================== BALANCE GENERAL TOTAL (HISTÓRICO) ====================
+  Future<Map<String, double>> getBalanceFinancieroTotal() async {
+    Database db = await database;
+    var ingresosRes = await db.rawQuery(
+      "SELECT SUM(monto) as total FROM finanzas WHERE tipo = 'Ingreso'"
+    );
+    var gastosRes = await db.rawQuery(
+      "SELECT SUM(monto) as total FROM finanzas WHERE tipo = 'Gasto'"
+    );
+
+    double ingresos = (ingresosRes.first['total'] as num?)?.toDouble() ?? 0.0;
+    double gastos = (gastosRes.first['total'] as num?)?.toDouble() ?? 0.0;
+
+    return {
+      'ingresos': ingresos,
+      'gastos': gastos,
+      'balance': ingresos - gastos,
+    };
+  }
+
+  /// Consulta para obtener las vacas gestantes junto con los días que faltan para su posible parto.
+  /// Calcula la Fecha Probable de Parto (FPP) sumando 283 días a la fecha de servicio (o fecha del evento)
+  /// y calcula los días restantes contra la fecha actual.
+  Future<List<Map<String, dynamic>>> getDiasFaltantesPartoGestantes() async {
+    Database db = await database;
+    return await db.rawQuery('''
+      SELECT r.*, g.nombre as animal_nombre, g.raza as animal_raza, g.sexo as animal_sexo, g.foto as animal_foto, g.categoria as animal_categoria,
+             COALESCE(r.fecha_servicio, r.fecha) as fecha_base,
+             date(COALESCE(r.fecha_servicio, r.fecha), '+283 days') as fecha_probable_parto,
+             CAST(julianday(date(COALESCE(r.fecha_servicio, r.fecha), '+283 days')) - julianday('now') AS INTEGER) as dias_faltantes
+      FROM reproduccion r
+      LEFT JOIN ganado g ON r.ganado_id = g.id
+      WHERE (r.tipo_evento = 'Diagnóstico Preñez' AND r.diagnostico = 'Gestante')
+         OR r.id IN (
+           SELECT MAX(id) FROM reproduccion 
+           GROUP BY arete_asociado 
+           HAVING tipo_evento = 'Diagnóstico Preñez' AND diagnostico = 'Gestante'
+         )
+      ORDER BY dias_faltantes ASC
+    ''');
   }
 }

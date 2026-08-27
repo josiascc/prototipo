@@ -4,6 +4,8 @@ import '../database/database_helper.dart';
 import '../theme/app_theme.dart';
 import '../widgets/animal_selector_dropdown.dart';
 import 'package:image_picker/image_picker.dart';
+import '../widgets/custom_date_field.dart';
+import 'configuracion_screen.dart';
 
 class ReproduccionScreen extends StatefulWidget {
   const ReproduccionScreen({Key? key}) : super(key: key);
@@ -21,6 +23,8 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
   String _filtroActivo = 'todos';
   bool _menuFabAbierto = false;
   final TextEditingController _searchController = TextEditingController();
+  double _filterTop = 88.0;
+  double _filterRight = 10.0;
 
   // Métricas para los 3 paneles superiores
   int _totalProduccion = 0;
@@ -31,6 +35,22 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
   void initState() {
     super.initState();
     _cargarDatosReproduccion();
+  }
+
+  // Convierte '26/08/2026' a '2026-08-26' para SQLite y DateTime.parse
+  String _convertirFechaAISO(String fechaVisual) {
+    if (fechaVisual.isEmpty) return DateTime.now().toIso8601String().split('T')[0];
+    if (fechaVisual.contains('-')) return fechaVisual;
+    try {
+      final partes = fechaVisual.split('/');
+      if (partes.length == 3) {
+        final dia = partes[0].padLeft(2, '0');
+        final mes = partes[1].padLeft(2, '0');
+        final anio = partes[2];
+        return '$anio-$mes-$dia';
+      }
+    } catch (_) {}
+    return fechaVisual;
   }
 
   Future<void> _cargarDatosReproduccion() async {
@@ -58,6 +78,7 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
       case 'gestante': return 'Gestante';
       case 'secas': return 'Secas';
       case 'inseminada': return 'Inseminada';
+      case 'monta': return 'Monta';
       case 'proximo_celo': return 'Próximo celo';
       default: return 'Todos';
     }
@@ -102,7 +123,9 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
 
     int? animalIdSeleccionado = hembras.first['id'];
     String? areteSeleccionado = hembras.first['arete'];
-    final fechaController = TextEditingController(text: DateTime.now().toIso8601String().split('T')[0]);
+    
+    final String fechaHoyISO = DateTime.now().toIso8601String().split('T')[0];
+    final fechaController = TextEditingController(text: ConfiguracionScreen.formatearFechaVisual(fechaHoyISO));
     final horaController = TextEditingController(text: TimeOfDay.now().format(context));
     final observadorController = TextEditingController();
     final notasController = TextEditingController();
@@ -146,7 +169,11 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
                       Row(
                         children: [
                           Expanded(
-                            child: _buildCampoFecha(context, fechaController, '2. Fecha de Detección', setStateDialog),
+                            child: CustomDateField(
+                              controller: fechaController,
+                              labelText: '2. Fecha de Detección (dd/mm/aaaa)',
+                              lastDate: DateTime(2100),
+                            ),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
@@ -225,7 +252,7 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
                         'ganado_id': animalIdSeleccionado,
                         'arete_asociado': areteSeleccionado,
                         'tipo_evento': 'Celo',
-                        'fecha': fechaController.text,
+                        'fecha': _convertirFechaAISO(fechaController.text.trim()),
                         'notas': 'Hora: ${horaController.text} | Intensidad: $intensidadSeleccionada | Signos: ${signosSeleccionados.join(', ')} | Obs: ${observadorController.text} ${notasController.text}',
                       });
                       if (!mounted) return;
@@ -257,7 +284,8 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
     }
 
     List<Map<String, dynamic>> animalesSeleccionados = [];
-    final fechaController = TextEditingController(text: DateTime.now().toIso8601String().split('T')[0]);
+    final String fechaHoyISO = DateTime.now().toIso8601String().split('T')[0];
+    final fechaController = TextEditingController(text: ConfiguracionScreen.formatearFechaVisual(fechaHoyISO));
     final horaController = TextEditingController(text: TimeOfDay.now().format(context));
     final idToroController = TextEditingController();
     final procedenciaController = TextEditingController();
@@ -426,7 +454,11 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
                       Row(
                         children: [
                           Expanded(
-                            child: _buildCampoFecha(context, fechaController, '2. Fecha Inseminación', setStateDialog),
+                            child: CustomDateField(
+                              controller: fechaController,
+                              labelText: '2. Fecha Inseminación (dd/mm/aaaa)',
+                              lastDate: DateTime(2100),
+                            ),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
@@ -487,7 +519,7 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
                         'ganado_id': animal['id'],
                         'arete_asociado': animal['arete'],
                         'tipo_evento': 'Inseminación',
-                        'fecha': fechaController.text,
+                        'fecha': _convertirFechaAISO(fechaController.text.trim()),
                         'notas': 'Semen: $tipoSemen | ID Toro: ${idToroController.text} | Inseminador: ${inseminadorController.text} | Num: ${numInseminacionController.text} | Protocolo: $protocolo',
                       });
                     }
@@ -522,7 +554,8 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
     int? toroId = machos.first['id'];
     String? toroArete = machos.first['arete'];
 
-    final fechaController = TextEditingController(text: DateTime.now().toIso8601String().split('T')[0]);
+    final String fechaHoyISO = DateTime.now().toIso8601String().split('T')[0];
+    final fechaController = TextEditingController(text: ConfiguracionScreen.formatearFechaVisual(fechaHoyISO));
     final obsController = TextEditingController();
     String tipoServicio = 'Dirigida';
 
@@ -573,7 +606,11 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
                         },
                       ),
                       const SizedBox(height: 16),
-                      _buildCampoFecha(context, fechaController, '3. Fecha de Monta', setStateDialog),
+                      CustomDateField(
+                        controller: fechaController,
+                        labelText: '3. Fecha de Monta (dd/mm/aaaa)',
+                        lastDate: DateTime(2100),
+                      ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
                         value: tipoServicio,
@@ -602,7 +639,7 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
                         'ganado_id': vacaId,
                         'arete_asociado': vacaArete,
                         'tipo_evento': 'Monta',
-                        'fecha': fechaController.text,
+                        'fecha': _convertirFechaAISO(fechaController.text.trim()),
                         'notas': 'Toro Arete: $toroArete | Tipo: $tipoServicio | Obs: ${obsController.text}',
                       });
                       if (!mounted) return;
@@ -634,7 +671,8 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
     }
 
     List<Map<String, dynamic>> animalesSeleccionados = [];
-    final fechaController = TextEditingController(text: DateTime.now().toIso8601String().split('T')[0]);
+    final String fechaHoyISO = DateTime.now().toIso8601String().split('T')[0];
+    final fechaController = TextEditingController(text: ConfiguracionScreen.formatearFechaVisual(fechaHoyISO));
     String metodoDiagnostico = 'Palpación rectal';
     
     Map<int, Map<String, dynamic>> datosPrenezPorAnimal = {};
@@ -722,7 +760,7 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
                                                 datosPrenezPorAnimal[animal['id']] = {
                                                   'resultado': 'Positivo',
                                                   'eventos': eventosPrevios,
-                                                  'evento_seleccionado': eventosPrevios.isNotEmpty ? eventosPrevios.first['fecha'] : fechaController.text,
+                                                  'evento_seleccionado': eventosPrevios.isNotEmpty ? eventosPrevios.first['fecha'] : _convertirFechaAISO(fechaController.text.trim()),
                                                   'agregar_nota': false,
                                                   'nota_controller': TextEditingController(),
                                                 };
@@ -817,7 +855,11 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
                               },
                             ),
                       const SizedBox(height: 16),
-                      _buildCampoFecha(context, fechaController, '2. Fecha de Evento', setStateDialog),
+                      CustomDateField(
+                        controller: fechaController,
+                        labelText: '2. Fecha de Evento (dd/mm/aaaa)',
+                        lastDate: DateTime(2100),
+                      ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
                         value: metodoDiagnostico,
@@ -848,8 +890,10 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
 
                                 String fechaPartoEstimada = 'N/A';
                                 try {
-                                  DateTime baseDate = eventoSeleccionado != null ? DateTime.parse(eventoSeleccionado) : DateTime.parse(fechaController.text);
-                                  fechaPartoEstimada = baseDate.add(const Duration(days: 283)).toIso8601String().split('T')[0];
+                                  String baseStr = _convertirFechaAISO(eventoSeleccionado ?? fechaController.text.trim());
+                                  DateTime baseDate = DateTime.parse(baseStr);
+                                  String fppISO = baseDate.add(const Duration(days: 283)).toIso8601String().split('T')[0];
+                                  fechaPartoEstimada = ConfiguracionScreen.formatearFechaVisual(fppISO);
                                 } catch (_) {}
 
                                 return Card(
@@ -909,9 +953,10 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
                                             : Column(
                                                 children: eventosPrevios.map((ev) {
                                                   String fechaEv = ev['fecha'] ?? '';
+                                                  String fechaEvVisual = ConfiguracionScreen.formatearFechaVisual(fechaEv);
                                                   String tipoEv = ev['tipo_evento'] ?? '';
                                                   return RadioListTile<String>(
-                                                    title: Text('$tipoEv - Fecha: $fechaEv', style: const TextStyle(fontSize: 12)),
+                                                    title: Text('$tipoEv - Fecha: $fechaEvVisual', style: const TextStyle(fontSize: 12)),
                                                     value: fechaEv,
                                                     groupValue: eventoSeleccionado,
                                                     dense: true,
@@ -973,21 +1018,43 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Selecciona al menos un animal.')));
                       return;
                     }
+
+                    String fechaEventoISO = _convertirFechaAISO(fechaController.text.trim());
+
                     for (var animal in animalesSeleccionados) {
                       final datos = datosPrenezPorAnimal[animal['id']] ?? {};
                       String res = datos['resultado'] ?? 'Positivo';
                       bool conNota = datos['agregar_nota'] ?? false;
                       String notaExtra = conNota ? (datos['nota_controller'] as TextEditingController).text : '';
-                      String cruceUsado = datos['evento_seleccionado'] ?? fechaController.text;
+                      String cruceUsadoISO = _convertirFechaAISO(datos['evento_seleccionado'] ?? fechaController.text.trim());
 
                       await _dbHelper.insertReproduccion({
                         'ganado_id': animal['id'],
                         'arete_asociado': animal['arete'],
                         'tipo_evento': 'Diagnóstico Preñez',
                         'diagnostico': res == 'Positivo' ? 'Gestante' : 'Vacía',
-                        'fecha': fechaController.text,
-                        'notas': 'Método: $metodoDiagnostico | Resultado: $res | Cruce base: $cruceUsado ${notaExtra.isNotEmpty ? '| Nota: $notaExtra' : ''}',
+                        'fecha': fechaEventoISO,
+                        'fecha_servicio': cruceUsadoISO,
+                        'notas': 'Método: $metodoDiagnostico | Resultado: $res ${notaExtra.isNotEmpty ? '| Nota: $notaExtra' : ''}',
                       });
+                      if (res == 'Positivo') {
+                        try {
+                          DateTime baseDate = DateTime.parse(cruceUsadoISO);
+                          DateTime fechaParto = baseDate.add(const Duration(days: 283));
+                          
+                          // Calcular 15 días antes para la alerta de preparto
+                          DateTime fechaAlertaPreparto = fechaParto.subtract(const Duration(days: 15));
+                          String fechaProgramadaStr = fechaAlertaPreparto.toIso8601String().split('T')[0];
+                          String fechaPartoStr = ConfiguracionScreen.formatearFechaVisual(fechaParto.toIso8601String().split('T')[0]);
+                      
+                          await _dbHelper.insertarActividad({
+                            'titulo': '(FPP: $fechaPartoStr) - Arete ${animal['arete']}',
+                            'tipo_lote': 'Gestante',
+                            'fecha_programada': fechaProgramadaStr,
+                            'completada': 0,
+                          });
+                        } catch (_) {}
+                      }
                     }
                     if (!mounted) return;
                     Navigator.pop(context);
@@ -1020,7 +1087,8 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
     int? padreId = machos.isNotEmpty ? machos.first['id'] : null;
     String? padreArete = machos.isNotEmpty ? machos.first['arete'] : null;
 
-    final fechaController = TextEditingController(text: DateTime.now().toIso8601String().split('T')[0]);
+    final String fechaHoyISO = DateTime.now().toIso8601String().split('T')[0];
+    final fechaController = TextEditingController(text: ConfiguracionScreen.formatearFechaVisual(fechaHoyISO));
     String tipoParto = 'Natural';
     int numeroCrias = 1;
 
@@ -1076,8 +1144,11 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
                         },
                       ),
                       const SizedBox(height: 16),
-                      _buildCampoFecha(context, fechaController, '2. Fecha de Parto', setStateDialog),
-                      const SizedBox(height: 12),
+                      CustomDateField(
+                        controller: fechaController,
+                        labelText: '2. Fecha de Parto (dd/mm/aaaa)',
+                        lastDate: DateTime(2100),
+                      ),
                       DropdownButtonFormField<String>(
                         value: tipoParto,
                         decoration: const InputDecoration(labelText: '3. Tipo de Parto'),
@@ -1202,7 +1273,6 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
                   ),
                   onPressed: () async {
                     if (vacaId != null && vacaArete != null) {
-                      // Preparar lista de crías formateadas
                       List<Map<String, dynamic>> criasAInsertar = detallesCrias.map((cria) {
                         return {
                           'arete': (cria['arete'] as TextEditingController).text,
@@ -1217,7 +1287,7 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
                           'ganado_id': vacaId,
                           'arete_asociado': vacaArete,
                           'tipo_evento': 'Parto',
-                          'fecha': fechaController.text,
+                          'fecha': _convertirFechaAISO(fechaController.text.trim()),
                           'notas': 'Tipo: $tipoParto | Crías: $numeroCrias | Padre: ${padreArete ?? 'N/A'}',
                         },
                         listaCrias: criasAInsertar,
@@ -1254,7 +1324,8 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
     int? animalId = hembras.first['id'];
     String? areteAnimal = hembras.first['arete'];
 
-    final fechaController = TextEditingController(text: DateTime.now().toIso8601String().split('T')[0]);
+    final String fechaHoyISO = DateTime.now().toIso8601String().split('T')[0];
+    final fechaController = TextEditingController(text: ConfiguracionScreen.formatearFechaVisual(fechaHoyISO));
     final notasController = TextEditingController();
 
     if (!mounted) return;
@@ -1289,7 +1360,11 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
                         },
                       ),
                       const SizedBox(height: 16),
-                      _buildCampoFecha(context, fechaController, '2. Fecha de evento', setStateDialog),
+                      CustomDateField(
+                        controller: fechaController,
+                        labelText: '2. Fecha de evento (dd/mm/aaaa)',
+                        lastDate: DateTime(2100),
+                      ),
                       const SizedBox(height: 12),
                       TextField(controller: notasController, decoration: const InputDecoration(labelText: '3. Nota'), maxLines: 2),
                     ],
@@ -1311,7 +1386,7 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
                         'ganado_id': animalId,
                         'arete_asociado': areteAnimal,
                         'tipo_evento': 'Aborto',
-                        'fecha': fechaController.text,
+                        'fecha': _convertirFechaAISO(fechaController.text.trim()),
                         'notas': notasController.text.trim().isEmpty ? 'Vacia' : notasController.text.trim(),
                       });
                       if (!mounted) return;
@@ -1332,6 +1407,20 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
   }
 
   void _mostrarDetalleReproduccion(Map<String, dynamic> item) {
+    final String estadoTag = _determinarEstadoItem(item);
+    final String fechaVisual = ConfiguracionScreen.formatearFechaVisual(item['fecha']);
+    final String? fechaServicioISO = item['fecha_servicio'];
+    final String fechaServicioVisual = ConfiguracionScreen.formatearFechaVisual(fechaServicioISO);
+    
+    String? fechaPartoEstimada;
+    if (fechaServicioISO != null && fechaServicioISO.isNotEmpty) {
+      try {
+        DateTime baseDate = DateTime.parse(_convertirFechaAISO(fechaServicioISO));
+        String fppISO = baseDate.add(const Duration(days: 283)).toIso8601String().split('T')[0];
+        fechaPartoEstimada = ConfiguracionScreen.formatearFechaVisual(fppISO);
+      } catch (_) {}
+    }
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
@@ -1355,7 +1444,15 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
               const SizedBox(height: 6),
               Text('Evento: ${item['tipo_evento']}'),
               const SizedBox(height: 6),
-              Text('Fecha: ${item['fecha']}'),
+              Text('Fecha: $fechaVisual'),
+              if (fechaServicioISO != null && fechaServicioISO.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text('Fecha de Servicio: $fechaServicioVisual'),
+              ],
+              if (fechaPartoEstimada != null && estadoTag == 'Gestante') ...[
+                const SizedBox(height: 6),
+                Text('Fecha Probable de Parto: $fechaPartoEstimada', style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryGreen)),
+              ],
               const SizedBox(height: 6),
               Text('Raza: ${item['animal_raza'] ?? 'No especificada'}'),
               const SizedBox(height: 12),
@@ -1372,15 +1469,20 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
 
   String _determinarEstadoItem(Map<String, dynamic> item) {
     final evento = (item['tipo_evento'] ?? '').toString().toLowerCase();
+    final diagnostico = (item['diagnostico'] ?? '').toString().toLowerCase();
     final notas = (item['notas'] ?? '').toString().toLowerCase();
     
+    if (diagnostico.contains('gestante')) return 'Gestante';
+    if (diagnostico.contains('vacía') || diagnostico.contains('vacia')) return 'Vacia';
+  
     if (evento.contains('parto') || evento.contains('producción')) return 'Produccion';
     if (evento.contains('gestante') || notas.contains('gestante') || (evento.contains('diagnóstico') && notas.contains('positivo'))) return 'Gestante';
-    if (evento.contains('inseminación')) return 'Inseminada';
-    if (evento.contains('monta')) return 'Inseminada';
+    if (evento.contains('inseminación') || evento.contains('inseminacion')) return 'Inseminada';
+    if (evento.contains('monta')) return 'Monta';
     if (evento.contains('celo')) return 'Celo';
     if (evento.contains('secado')) return 'Secas';
-    if (evento.contains('aborto') || evento.contains('vacía') || (evento.contains('diagnóstico') && notas.contains('negativo'))) return 'Vacia';
+    if (evento.contains('aborto') || evento.contains('vacía') || evento.contains('vacia') || (evento.contains('diagnóstico') && notas.contains('negativo'))) return 'Vacia';
+    
     return 'Vacia';
   }
 
@@ -1392,20 +1494,35 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
       final estadoActual = _determinarEstadoItem(item).toLowerCase();
       bool coincideFiltro = true;
 
-      if (_filtroActivo == 'produccion') {
-        coincideFiltro = estadoActual.contains('produccion');
-      } else if (_filtroActivo == 'vacia') {
-        coincideFiltro = estadoActual.contains('vacia');
-      } else if (_filtroActivo == 'celo') {
-        coincideFiltro = estadoActual.contains('celo');
-      } else if (_filtroActivo == 'gestante') {
-        coincideFiltro = estadoActual.contains('gestante');
-      } else if (_filtroActivo == 'secas') {
-        coincideFiltro = estadoActual.contains('secas');
-      } else if (_filtroActivo == 'inseminada') {
-        coincideFiltro = estadoActual.contains('inseminada');
-      } else if (_filtroActivo == 'proximo_celo') {
-        coincideFiltro = estadoActual.contains('celo');
+      switch (_filtroActivo) {
+        case 'produccion':
+          coincideFiltro = estadoActual.contains('produccion');
+          break;
+        case 'vacia':
+          coincideFiltro = estadoActual.contains('vacia');
+          break;
+        case 'celo':
+          coincideFiltro = estadoActual.contains('celo');
+          break;
+        case 'gestante':
+          coincideFiltro = estadoActual.contains('gestante');
+          break;
+        case 'secas':
+          coincideFiltro = estadoActual.contains('secas');
+          break;
+        case 'inseminada':
+          coincideFiltro = estadoActual.contains('inseminada');
+          break;
+        case 'monta':
+          coincideFiltro = estadoActual.contains('monta');
+          break;
+        case 'proximo_celo':
+          coincideFiltro = estadoActual.contains('celo');
+          break;
+        case 'todos':
+        default:
+          coincideFiltro = true;
+          break;
       }
 
       final textoCompleto = '${item['arete_asociado']} ${item['animal_nombre']} ${item['tipo_evento']} ${item['animal_raza']} ${item['notas']}'.toLowerCase();
@@ -1453,21 +1570,22 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
                               final String nombre = item['animal_nombre'] ?? '';
                               final String raza = item['animal_raza'] ?? 'No especificada';
                               final String fecha = item['fecha'] ?? '';
+                              final String fechaVisual = ConfiguracionScreen.formatearFechaVisual(fecha);
                               final String estadoTag = _determinarEstadoItem(item);
 
                               bool esArchivoLocal = fotoPath != null && fotoPath.isNotEmpty && File(fotoPath).existsSync();
 
-                              String infoAdicional = 'Fecha: $fecha';
-                              if (estadoTag == 'Gestante' && fecha.isNotEmpty) {
+                              String infoAdicional = 'Fecha: $fechaVisual';
+                              if (estadoTag == 'Gestante') {
                                 try {
-                                  final fechaInicio = DateTime.parse(fecha);
-                                  final dias = DateTime.now().difference(fechaInicio).inDays;
-                                  infoAdicional = 'Gestación: $dias días | Fecha: $fecha';
-                                } catch (_) {}
-                              } else if (_filtroActivo == 'proximo_celo' && fecha.isNotEmpty) {
-                                try {
-                                  final fechaCelo = DateTime.parse(fecha).add(const Duration(days: 21));
-                                  infoAdicional = 'Próximo celo aprox: ${fechaCelo.toIso8601String().split('T')[0]}';
+                                  final String fechaServicioRaw = item['fecha_servicio'] ?? item['fecha'] ?? '';
+                                  if (fechaServicioRaw.isNotEmpty) {
+                                    final String fechaServicioISO = _convertirFechaAISO(fechaServicioRaw);
+                                    final fechaInicio = DateTime.parse(fechaServicioISO);
+                                    final dias = DateTime.now().difference(fechaInicio).inDays;
+                                    final String servicioVisual = ConfiguracionScreen.formatearFechaVisual(fechaServicioISO);
+                                    infoAdicional = 'Gestación: $dias días | Servicio: $servicioVisual';
+                                  }
                                 } catch (_) {}
                               }
 
@@ -1525,48 +1643,66 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
               ),
             ],
           ),
+          // Positioned ACTUAL DEL FILTRO:
           Positioned(
-            top: 8,
-            right: 16,
-            child: Container(
-              height: 36,
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: AppTheme.primaryGreen, width: 1.2),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 8, offset: const Offset(0, 2)),
-                ],
-              ),
-              child: PopupMenuButton<String>(
-                padding: EdgeInsets.zero,
-                icon: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox(width: 4),
-                    Icon(Icons.filter_list, size: 16, color: AppTheme.primaryGreen),
-                    const SizedBox(width: 4),
-                    Text(
-                      _obtenerNombreFiltroCorto(_filtroActivo),
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primaryGreen),
-                    ),
-                    const SizedBox(width: 4),
+            top: _filterTop,
+            right: _filterRight,
+            child: GestureDetector(
+              onPanUpdate: (details) {
+                setState(() {
+                  _filterTop += details.delta.dy;
+                  _filterRight -= details.delta.dx; // Restar delta.dx mueve el botón horizontalmente respecto al borde derecho
+
+                  // Límites para evitar que el botón salga de la pantalla
+                  if (_filterTop < 0) _filterTop = 0;
+                  if (_filterRight < 0) _filterRight = 0;
+                  final screenHeight = MediaQuery.of(context).size.height - 100;
+                  if (_filterTop > screenHeight) _filterTop = screenHeight;
+                  final screenWidth = MediaQuery.of(context).size.width - 100;
+                  if (_filterRight > screenWidth) _filterRight = screenWidth;
+                });
+              },
+              child: Container(
+                height: 36,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: AppTheme.primaryGreen, width: 1.2),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 8, offset: const Offset(0, 2)),
                   ],
                 ),
-                offset: const Offset(0, 40),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                onSelected: (value) => setState(() => _filtroActivo = value),
-                itemBuilder: (context) => [
-                  const PopupMenuItem(value: 'todos', child: Text('Todos')),
-                  const PopupMenuItem(value: 'produccion', child: Text('Producción')),
-                  const PopupMenuItem(value: 'vacia', child: Text('Vacía')),
-                  const PopupMenuItem(value: 'celo', child: Text('Celo')),
-                  const PopupMenuItem(value: 'gestante', child: Text('Gestante')),
-                  const PopupMenuItem(value: 'secas', child: Text('Secas')),
-                  const PopupMenuItem(value: 'inseminada', child: Text('Inseminada')),
-                  const PopupMenuItem(value: 'proximo_celo', child: Text('Próximo celo')),
-                ],
+                child: PopupMenuButton<String>(
+                  padding: EdgeInsets.zero,
+                  icon: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(width: 4),
+                      Icon(Icons.filter_list, size: 16, color: AppTheme.primaryGreen),
+                      const SizedBox(width: 4),
+                      Text(
+                        _obtenerNombreFiltroCorto(_filtroActivo),
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primaryGreen),
+                      ),
+                      const SizedBox(width: 4),
+                    ],
+                  ),
+                  offset: const Offset(0, 40),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  onSelected: (value) => setState(() => _filtroActivo = value),
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(value: 'todos', child: Text('Todos')),
+                    const PopupMenuItem(value: 'produccion', child: Text('Producción')),
+                    const PopupMenuItem(value: 'vacia', child: Text('Vacía')),
+                    const PopupMenuItem(value: 'celo', child: Text('Celo')),
+                    const PopupMenuItem(value: 'gestante', child: Text('Gestante')),
+                    const PopupMenuItem(value: 'secas', child: Text('Secas')),
+                    const PopupMenuItem(value: 'inseminada', child: Text('Inseminada')),
+                    const PopupMenuItem(value: 'monta', child: Text('Monta')),
+                    const PopupMenuItem(value: 'proximo_celo', child: Text('Próximo celo')),
+                  ],
+                ),
               ),
             ),
           ),
@@ -1659,30 +1795,6 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildCampoFecha(BuildContext context, TextEditingController controller, String label, StateSetter setStateDialog) {
-    return TextField(
-      controller: controller,
-      decoration: InputDecoration(
-        labelText: label,
-        suffixIcon: const Icon(Icons.calendar_today, size: 20),
-      ),
-      readOnly: true,
-      onTap: () async {
-        DateTime? pickedDate = await showDatePicker(
-          context: context,
-          initialDate: DateTime.now(),
-          firstDate: DateTime(2000),
-          lastDate: DateTime(2100),
-        );
-        if (pickedDate != null) {
-          setStateDialog(() {
-            controller.text = pickedDate.toIso8601String().split('T')[0];
-          });
-        }
-      },
     );
   }
 
