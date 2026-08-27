@@ -1048,6 +1048,7 @@ class _ReproduccionScreenState extends State<ReproduccionScreen> {
                           String fechaPartoStr = ConfiguracionScreen.formatearFechaVisual(fechaParto.toIso8601String().split('T')[0]);
                       
                           await _dbHelper.insertarActividad({
+                            'ganado_id': animal['id'], // <--- AQUÍ GUARDAMOS EL ID DE LA VACA
                             'titulo': '(FPP: $fechaPartoStr) - Arete ${animal['arete']}',
                             'tipo_lote': 'Gestante',
                             'fecha_programada': fechaProgramadaStr,

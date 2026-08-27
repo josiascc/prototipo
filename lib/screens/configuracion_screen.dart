@@ -54,11 +54,13 @@ class ConfiguracionScreen extends StatefulWidget {
 class _ConfiguracionScreenState extends State<ConfiguracionScreen> {
   bool _isLoading = false;
   String _monedaSeleccionada = 'Bolivianos (Bs)';
+  String _versionApp = '1.0.0'; // Valor por defecto
 
   @override
   void initState() {
     super.initState();
     _cargarMoneda();
+    _cargarVersionApp(); // <--- Cargamos la versión automáticamente
   }
 
   Future<void> _cargarMoneda() async {
@@ -410,14 +412,17 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen> {
                   elevation: 2,
                   child: Column(
                     children: [
-                      const Padding(
+                      Padding(
                         padding: EdgeInsets.all(16.0),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'GanaderoPro v1.0.0',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              'GanaderoPro v$_versionApp',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
                             ),
                             SizedBox(height: 6),
                             Text(
@@ -441,5 +446,14 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen> {
               ],
             ),
     );
+  }
+
+  Future<void> _cargarVersionApp() async {
+    try {
+      PackageInfo packageInfo = await PackageInfo.fromPlatform();
+      setState(() {
+        _versionApp = packageInfo.version; // Lee automáticamente el pubspec.yaml
+      });
+    } catch (_) {}
   }
 }

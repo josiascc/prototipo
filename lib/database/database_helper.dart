@@ -23,9 +23,9 @@ class DatabaseHelper {
     String path = join(appDir.path, 'prototipoganado.db');
     return await openDatabase(
       path,
-      version: 1, // <--- Mantén esto en 1 mientras estés en fase de prototipo limpio
+      version: 2, // <--- cambiamos y agregamos nuevo campos en tablas
       onCreate: _onCreate,
-      // onUpgrade: _onUpgrade, // <--- Descomenta esto cuando decidas activar migraciones automáticas
+      onUpgrade: _onUpgrade, // <--- Activamos el manejador de migraciones
     );
   }
 
@@ -147,10 +147,12 @@ class DatabaseHelper {
     await db.execute('''
       CREATE TABLE actividades (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ganado_id INTEGER, -- <--- NUEVA COLUMNA
         titulo TEXT,
         tipo_lote TEXT,
         fecha_programada TEXT,
-        completada INTEGER DEFAULT 0
+        completada INTEGER DEFAULT 0,
+        FOREIGN KEY (ganado_id) REFERENCES ganado (id) ON DELETE CASCADE
       )
     ''');
   }
@@ -166,13 +168,13 @@ class DatabaseHelper {
    *    del usuario hasta la nueva, aplicando los cambios paso a paso de forma limpia.
    */
 
-  /*
   // Mapa de migraciones ordenado por versión objetivo
   final Map<int, Future<void> Function(Database db)> _migrations = {
     2: (db) async {
-      // Ejemplo Versión 2: Agregar columna color a ganado
-      await db.execute("ALTER TABLE ganado ADD COLUMN color TEXT;");
+      // Agregamos la columna ganado_id a la tabla actividades existente
+      await db.execute("ALTER TABLE actividades ADD COLUMN ganado_id INTEGER;");
     },
+    /*
     3: (db) async {
       // Ejemplo Versión 3: Crear una tabla completamente nueva
       await db.execute('''
@@ -191,10 +193,10 @@ class DatabaseHelper {
       // Ejemplo Versión 5: Modificar/añadir restricciones o lo que necesites
       await db.execute("ALTER TABLE finanzas ADD COLUMN comprobante TEXT;");
     },
+    */
   };
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // Bucle inteligente que ejecuta las migraciones de forma secuencial
     for (int version = oldVersion + 1; version <= newVersion; version++) {
       if (_migrations.containsKey(version)) {
         try {
@@ -205,7 +207,6 @@ class DatabaseHelper {
       }
     }
   }
-  */
 
   // ===========================================================================
   // MÉTODOS DE NEGOCIO (CRUD Y CONSULTAS)
@@ -399,11 +400,18 @@ class DatabaseHelper {
   // ==================== ACTIVIDADES ====================
   Future<List<Map<String, dynamic>>> queryActividadesPendientes() async {
     Database db = await database;
-    return await db.query(
-      'actividades',
-      where: 'completada = 0',
-      orderBy: "CASE WHEN tipo_lote LIKE '%Reproducción%' THEN 0 ELSE 1 END, fecha_programada ASC",
-    );
+    return await db.rawQuery('''
+      SELECT a.*, 
+             g.arete as animal_arete, 
+             g.nombre as animal_nombre, 
+             g.foto as animal_foto, 
+             g.raza as animal_raza,
+             (SELECT r.tipo_evento FROM reproduccion r WHERE r.ganado_id = a.ganado_id ORDER BY r.id DESC LIMIT 1) as ultimo_tipo_evento
+      FROM actividades a
+      LEFT JOIN ganado g ON a.ganado_id = g.id
+      WHERE a.completada = 0
+      ORDER BY CASE WHEN a.tipo_lote LIKE '%Gestante%' THEN 0 ELSE 1 END, a.fecha_programada ASC
+    ''');
   }
 
   Future<int> insertarActividad(Map<String, dynamic> row) async {
@@ -419,6 +427,41 @@ class DatabaseHelper {
   Future<int> deleteGanado(int id) async {
     Database db = await database;
     return await db.delete('ganado', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> updateGanado(int id, Map<String, dynamic> row) async {
+    Database db = await database;
+    return await db.update('ganado', row, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> updateSanidad(int id, Map<String, dynamic> row) async {
+    Database db = await database;
+    return await db.update('sanidad', row, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> updateReproduccion(int id, Map<String, dynamic> row) async {
+    Database db = await database;
+    return await db.update('reproduccion', row, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> updateProduccion(int id, Map<String, dynamic> row) async {
+    Database db = await database;
+    return await db.update('produccion', row, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> updateInventario(int id, Map<String, dynamic> row) async {
+    Database db = await database;
+    return await db.update('inventario', row, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> updateFinanza(int id, Map<String, dynamic> row) async {
+    Database db = await database;
+    return await db.update('finanzas', row, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> updateActividad(int id, Map<String, dynamic> row) async {
+    Database db = await database;
+    return await db.update('actividades', row, where: 'id = ?', whereArgs: [id]);
   }
 
   // ==================== CONSULTAS POR RANGO DE FECHAS ====================

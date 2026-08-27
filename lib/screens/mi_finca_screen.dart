@@ -4,6 +4,7 @@ import '../database/database_helper.dart';
 import '../theme/app_theme.dart';
 import '../widgets/custom_date_field.dart';
 import 'configuracion_screen.dart';
+import 'dart:io';
 
 class MiFincaScreen extends StatefulWidget {
   const MiFincaScreen({Key? key}) : super(key: key);
@@ -476,21 +477,33 @@ class _MiFincaScreenState extends State<MiFincaScreen> {
                             final String tipoLote = actividad['tipo_lote'] ?? 'General';
                             bool esGestante = tipoLote.toLowerCase().contains('gestante');
 
-                            String subtitulo = 'Lote/Área: $tipoLote | Fecha: $fechaVisual';
+                            // Datos de la vaca y servicio
+                            final String? fotoPath = actividad['animal_foto'];
+                            final String nombreVaca = actividad['animal_nombre'] ?? '';
+                            final String areteVaca = actividad['animal_arete'] ?? '';
+                            final String tipoServicio = actividad['ultimo_tipo_evento'] ?? 'Servicio'; 
+                            bool esArchivoLocal = fotoPath != null && fotoPath.isNotEmpty && File(fotoPath).existsSync();
+
+                            String tituloCard = actividad['titulo'] ?? 'Sin título';
+                            if (esGestante && areteVaca.isNotEmpty) {
+                              tituloCard = 'Arete: $areteVaca ${nombreVaca.isNotEmpty ? '($nombreVaca)' : ''}';
+                            }
+
+                            int diasRestantes = 0;
+                            String subtitulo = 'Área: $tipoLote | Fecha: $fechaVisual';
                             if (esGestante) {
                               try {
                                 DateTime fechaProg = DateTime.parse(actividad['fecha_programada']);
-                                // Como la alerta se programa 15 días antes de la FPP, sumamos 15 días para obtener la fecha de parto
                                 DateTime fechaParto = fechaProg.add(const Duration(days: 15));
                                 DateTime hoy = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
-                                int diasRestantes = fechaParto.difference(hoy).inDays;
+                                diasRestantes = fechaParto.difference(hoy).inDays;
 
                                 if (diasRestantes > 0) {
-                                  subtitulo = 'Lote/Área: $tipoLote | ⏳ Faltan $diasRestantes días para el parto';
+                                  subtitulo = 'Servicio: $tipoServicio | ⏳ Faltan $diasRestantes días para el parto';
                                 } else if (diasRestantes == 0) {
-                                  subtitulo = 'Lote/Área: $tipoLote | 🚨 ¡Parto esperado HOY!';
+                                  subtitulo = 'Servicio: $tipoServicio | 🚨 ¡Parto esperado HOY!';
                                 } else {
-                                  subtitulo = 'Lote/Área: $tipoLote | ⚠️ Parto atrasado por ${diasRestantes.abs()} días';
+                                  subtitulo = 'Servicio: $tipoServicio | ⚠️ Parto atrasado por ${diasRestantes.abs()} días';
                                 }
                               } catch (_) {}
                             }
@@ -499,9 +512,15 @@ class _MiFincaScreenState extends State<MiFincaScreen> {
                               elevation: 2,
                               margin: const EdgeInsets.only(bottom: 8),
                               child: ListTile(
-                                leading: const Icon(Icons.notifications_active, color: AppTheme.primaryGreen),
+                                leading: CircleAvatar(
+                                  backgroundColor: AppTheme.lightGreen.withOpacity(0.2),
+                                  backgroundImage: esArchivoLocal ? FileImage(File(fotoPath)) : null,
+                                  child: !esArchivoLocal 
+                                      ? Icon(esGestante ? Icons.favorite : Icons.notifications_active, color: AppTheme.primaryGreen) 
+                                      : null,
+                                ),
                                 title: Text(
-                                  actividad['titulo'] ?? 'Sin título',
+                                  tituloCard,
                                   style: const TextStyle(fontWeight: FontWeight.bold),
                                 ),
                                 subtitle: Text(subtitulo),
